@@ -1,0 +1,3 @@
+n=256, 0.00 GiB por matriz, 1 threads
+CSV,n,rep,seconds,GFLOPs
+CSV,256,0,0.0008,43.9

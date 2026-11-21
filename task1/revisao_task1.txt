@@ -566,3 +566,17 @@
      Se não existir, a energia do A64FX fica sem fonte confirmada e tem de
      sair do relatório (ou ficar como "a confirmar").
 ###############################################################################
+###############################################################################
+ ADENDA 21/11/2026 17:00 - B5 fechado: jobs de diagnóstico do SGEMM (D26)
+   2256145 (0.3.27-GCC, medianas n=16384/8192): bindClose 3694/2780,
+     bindSpread 3023/2743, livre 2261/1253, interleave 3825/1897 GFLOP/s.
+   2256160 (n=16384, 5 reps): 0.3.27-GCC T128 bindClose 4588, T64
+     bindSpread 4073, T64 livre 3953, T128 interleave 3323, T128 livre 2406;
+     0.3.32-llvm T128 interleave 4786, T64 livre 4758, T128 livre 4543,
+     bind -> TIMEOUT.
+   Conclusões: colapso do bind = 2 runtimes OpenMP (demonstrado); versão
+     ~4%; variação entre jobs ~20%; AMD 4.5-5.6 TF (40-49%) em 128 cores,
+     70-84% do pico de 64 cores -> perda na escala a 2 sockets.
+   Decisão do Rodrigo: D26 (intervalo + 64 cores + bind no relatório).
+   Ainda pendente: verificações da GPU (nsys/ncu, dmi do nó A100).
+###############################################################################

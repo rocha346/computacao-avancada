@@ -1,0 +1,8 @@
+n=8192, 0.25 GiB por matriz, 128 threads
+n=8192, 0.25 GiB por matriz, 128 threads
+n=8192, 0.25 GiB por matriz, 128 threads
+n=8192, 0.25 GiB por matriz, 128 threads
+n=16384, 1.00 GiB por matriz, 128 threads
+n=16384, 1.00 GiB por matriz, 128 threads
+n=16384, 1.00 GiB por matriz, 128 threads
+n=16384, 1.00 GiB por matriz, 128 threads

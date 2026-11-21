@@ -38,8 +38,8 @@ our measurements. \emph{Peak}: independent FMA chains in registers, 12 (AMD) or 
 hide the measured FMA latency (5 and 9 cycles); 8 per thread at full occupancy on the GPU.
 \emph{Bandwidth}: STREAM~\cite{stream} (best of 19) and our Triad agree within 1.5\%; LLC: Triad
 with 2~MiB (AMD) or 256~KiB (A64FX) per thread. \emph{Latency}: 1-thread pointer chasing over a
-random (Sattolo) cycle, which defeats prefetching. Values are medians of 10 runs after a warm-up;
-IQR below 1.1\% (SGEMM: 5\%).
+random (Sattolo) cycle, defeating prefetch. Medians of 10 runs after a warm-up;
+IQR below 1.1\% for microbenchmarks.
 
 \begin{table}[!t]\centering\scriptsize
 \caption{Platforms, FP32 per node: nominal / measured}\label{tab:hw}
@@ -70,12 +70,11 @@ kernel exposes no cache data; the latency curve recovered the 64~KiB L1, the 8~M
 two TLB knees (1 and 64~MiB: 16 and 1024 entries of 64~KiB pages). (iii)~One AMD thread sees only its CCX's 16~MiB L3. (iv)~The A100 L2 is two 20~MiB halves; the far one doubles
 latency.
 
-\emph{Validation and problems found.} SGEMM (OpenBLAS; Fujitsu SSL2) reached
-49\% and 65\% of the measured peak. On the AMD,
-the LLVM-built OpenBLAS loads its own OpenMP runtime (\texttt{libomp}) next to our \texttt{libgomp},
-so binding was erratic (once 15.7~GFLOP/s); removing it gained only 5\% at
-$n=8192$, and the larger $n=16384$ reached 5558~GFLOP/s. We redid the A64FX L2 Triad (IQR 9\%: 6~MiB per CMG sat at the edge of the 8~MiB L2) and the
-\texttt{zfill} STREAM, which our script had silently skipped.
+\emph{Validation and problems found.} Fujitsu SSL2 SGEMM reached 65\% of the A64FX peak. OpenBLAS
+SGEMM ($n=16384$) reached 4.5--5.6~TFLOP/s on 128 cores (40--49\%, $\sim$20\% job to job), but 64 threads already reach 70--84\% of the 64-core peak: the gap is in scaling across sockets,
+not in the peak. Binding collapsed (timeout) only with the LLVM-built OpenBLAS, which loads a second OpenMP runtime
+(\texttt{libomp}). We redid the A64FX L2 Triad (6~MiB per CMG sat at the edge of the L2) and the \texttt{zfill}
+STREAM, which our script had skipped.
 
 \section{Roofline model (1.2)}
 Fig.~\ref{fig:roof} draws both rooflines in one graph (Appendix~A of~\cite{roofline}) with measured

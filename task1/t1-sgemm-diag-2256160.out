@@ -1,0 +1,26 @@
+== kernel escolhido pelo OpenBLAS
+res-sgemm-diag-2256160/core-v027.txt:n=256, 0.00 GiB por matriz, 1 threads
+res-sgemm-diag-2256160/core-v027.txt:CSV,n,rep,seconds,GFLOPs
+res-sgemm-diag-2256160/core-v027.txt:CSV,256,0,0.0008,43.9
+res-sgemm-diag-2256160/core-v032.txt:n=256, 0.00 GiB por matriz, 1 threads
+res-sgemm-diag-2256160/core-v032.txt:CSV,n,rep,seconds,GFLOPs
+res-sgemm-diag-2256160/core-v032.txt:CSV,256,0,0.0006,52.7
+== bibliotecas
+res-sgemm-diag-2256160/ldd-v027.txt:	libopenblas.so.0 => /eb/x86_64/software/OpenBLAS/0.3.27-GCC-13.3.0/lib/libopenblas.so.0 (0x00007fd7449ee000)
+res-sgemm-diag-2256160/ldd-v027.txt:	libgomp.so.1 => /eb/x86_64/software/GCCcore/15.2.0/lib64/libgomp.so.1 (0x00007fd745985000)
+res-sgemm-diag-2256160/ldd-v032.txt:	libopenblas.so.0 => /eb/x86_64/software/OpenBLAS/0.3.32-llvm-compilers-21.1.8/lib/libopenblas.so.0 (0x00007fde2d74b000)
+res-sgemm-diag-2256160/ldd-v032.txt:	libgomp.so.1 => /eb/x86_64/software/GCCcore/15.2.0/lib64/libgomp.so.1 (0x00007fde2e8b8000)
+res-sgemm-diag-2256160/ldd-v032.txt:	libomp.so => /eb/x86_64/software/LLVM/21.1.8-GCCcore-15.2.0/lib/x86_64-unknown-linux-gnu/libomp.so (0x00007fde2e79f000)
+== avisos
+TIMEOUT: v032 T128-bindClose
+TIMEOUT: v032 T64-bindSpread
+== GFLOP/s por repeticao (versao, config)
+v027 T128-bindClose: 4179.7 4338.2 4675.6 4588.2 4825.9
+v027 T128-interleave: 3322.8 3338.8 3323.5 2871.7 2943.2
+v027 T128-livre: 2483.4 2298.6 2405.9 2618.6 2284.6
+v027 T64-bindSpread: 4073.2 4094.0 4116.3 4001.5 3969.0
+v027 T64-livre: 3949.1 4006.2 3867.7 3952.8 3958.1
+v032 T128-interleave: 5039.7 4725.7 4786.5 4576.5 4996.0
+v032 T128-livre: 4527.7 4650.9 4629.4 4542.2 4483.0
+v032 T64-livre: 4479.8 4591.6 4758.0 4868.2 4989.7
+RESUMO: 0 FALHOU   (resultados em res-sgemm-diag-2256160/)

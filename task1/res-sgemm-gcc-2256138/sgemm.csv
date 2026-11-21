@@ -1,0 +1,8 @@
+cfg=livre,CSV,1024,0,0.1033,20.8
+cfg=livre,CSV,1024,1,0.1122,19.1
+cfg=livreInterleave,CSV,1024,0,0.1158,18.5
+cfg=livreInterleave,CSV,1024,1,0.1157,18.6
+cfg=bindClose,CSV,1024,0,0.0044,489.0
+cfg=bindClose,CSV,1024,1,0.0044,484.3
+cfg=bindSpread,CSV,1024,0,0.0052,414.0
+cfg=bindSpread,CSV,1024,1,0.0046,466.8

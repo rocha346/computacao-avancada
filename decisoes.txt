@@ -623,6 +623,44 @@ Porquê:       - Em IEEE as letras das figuras devem ser legíveis impressas.
                 limpo (rejeitadas: telhado teórico em linha fina, ou nada).
 Estado:       DECIDIDO (Rodrigo, 21/11/2026)
 
+[D26] SGEMM no relatório: intervalo + 64 cores + bind         (21/11/2026, Task 1.2/1.4)
+Contexto:     A revisão (B5) mostrou que a história "tirar o bind deu 49%"
+              estava exagerada. Dois jobs de diagnóstico (n=16384):
+              - 2256145 (OpenBLAS 0.3.27-GCC, só libgomp), medianas
+                n=16384/8192: bindClose 3694/2780, bindSpread 3023/2743,
+                livre 2261/1253, interleave 3825/1897 GFLOP/s.
+              - 2256160 (5 reps, as duas versões):
+                0.3.27-GCC:  T128 bindClose 4588 | T64 bindSpread 4073 |
+                             T64 livre 3953 | T128 interleave 3323 |
+                             T128 livre 2406
+                0.3.32-llvm: T128 interleave 4786 | T64 livre 4758 |
+                             T128 livre 4543 | bindClose T128 e bindSpread
+                             T64 -> TIMEOUT (colapso)
+Decisão:      (escolha do Rodrigo) O relatório e a análise dizem:
+              (a) INTERVALO: 4.5-5.6 TFLOP/s em 128 cores = 40-49% do pico
+                  medido (11.27 TF), e não um número único (a variação entre
+                  jobs é ~20%: 5558 vs 4543; 3694 vs 4588).
+              (b) 64 CORES: com 64 threads chega quase ao mesmo (3953-4758),
+                  ou seja 70-84% do pico de 64 cores (~5.6 TF). A perda está
+                  em escalar para 2 sockets (hipótese: NUMA/sincronização), não
+                  no pico do peak.c, que fica reforçado.
+              (c) BIND: o colapso com bind só acontece com o OpenBLAS
+                  0.3.32-llvm, que carrega 2 runtimes OpenMP (libgomp +
+                  libomp, ldd). Com o 0.3.27-GCC (só libgomp) o bind até é a
+                  melhor configuração. A diferença entre versões, no melhor
+                  caso de cada uma, é ~4% (4786 vs 4588).
+Porquê:       - Um número só (49%) escondia uma variação de 20% entre jobs.
+              - O resultado de 64 threads mostra que o pico medido é
+                atingível por um código real; o problema é a escala.
+              - A causa do bind ficou demonstrada (ldd + 2 versões), já não é
+                hipótese.
+Alternativas: Intervalo + bind sem 64 cores (perde o melhor argumento a
+              favor do pico); só registar aqui sem mexer no relatório.
+Impacto:      Task 2: usar OpenBLAS/0.3.27-GCC-13.3.0 sempre que houver
+              BLAS + OpenMP; testar afinidade (T4) antes de fixar o bind;
+              repetir medidas em jobs diferentes antes de citar um número.
+Estado:       DECIDIDO (Rodrigo, 21/11/2026)
+
 ===============================================================================
  DECISÕES PENDENTES (a discutir)
 ===============================================================================

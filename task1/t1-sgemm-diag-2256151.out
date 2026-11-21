@@ -1,0 +1,20 @@
+== kernel escolhido pelo OpenBLAS
+== bibliotecas
+res-sgemm-diag-2256151/ldd-v027.txt:	libopenblas.so.0 => /eb/x86_64/software/OpenBLAS/0.3.27-GCC-13.3.0/lib/libopenblas.so.0 (0x00007fb559678000)
+res-sgemm-diag-2256151/ldd-v027.txt:	libgomp.so.1 => /eb/x86_64/software/GCCcore/15.2.0/lib64/libgomp.so.1 (0x00007fb55a609000)
+res-sgemm-diag-2256151/ldd-v032.txt:	libopenblas.so.0 => /eb/x86_64/software/OpenBLAS/0.3.32-llvm-compilers-21.1.8/lib/libopenblas.so.0 (0x00007fe38706b000)
+res-sgemm-diag-2256151/ldd-v032.txt:	libgomp.so.1 => /eb/x86_64/software/GCCcore/15.2.0/lib64/libgomp.so.1 (0x00007fe3881d8000)
+res-sgemm-diag-2256151/ldd-v032.txt:	libomp.so => /eb/x86_64/software/LLVM/21.1.8-GCCcore-15.2.0/lib/x86_64-unknown-linux-gnu/libomp.so (0x00007fe3880bf000)
+== avisos
+== GFLOP/s por repeticao (versao, config)
+v027 T128-bindClose: 506.2 485.9
+v027 T128-interleave: 18.6 20.7
+v027 T128-livre: 20.8 20.9
+v027 T64-bindSpread: 513.4 534.7
+v027 T64-livre: 475.9 499.3
+v032 T128-bindClose: 0.2 0.2
+v032 T128-interleave: 13.5 16.9
+v032 T128-livre: 16.6 15.3
+v032 T64-bindSpread: 0.4 0.4
+v032 T64-livre: 19.4 50.3
+RESUMO: 2 FALHOU   (resultados em res-sgemm-diag-2256151/)

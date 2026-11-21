@@ -330,6 +330,22 @@
       SGEMM valida-o em parte (AMD 49%, A64FX 65%) e a história do bind é uma
       "deficiência encontrada" que vale a pena contar.
 
+ ATUALIZAÇÃO 21/11/2026 (jobs 2256145 e 2256160, D26) - substitui as
+ conclusões acima onde houver conflito:
+   * Os dois runtimes OpenMP são a causa do colapso com bind (ldd: o
+     0.3.32-llvm carrega libgomp + libomp). Com o OpenBLAS/0.3.27-GCC (só
+     libgomp) o bind funciona e até é o melhor (T128 bindClose 4588).
+     Com o 0.3.32-llvm, bindClose T128 e bindSpread T64 deram TIMEOUT.
+   * Versão do OpenBLAS: ~4% no melhor caso de cada (4786 vs 4588). Não é
+     ela que explica os 49%.
+   * Variação entre jobs ~20% (5558 vs 4543 no mesmo caso; 3694 vs 4588):
+     o SGEMM do AMD dá-se como INTERVALO, 4.5-5.6 TFLOP/s = 40-49% do pico.
+   * 64 threads ~ 128 threads (T64: 3953-4758): 70-84% do pico de 64 cores
+     (~5.6 TF). O que falta está em escalar para os 2 sockets (hipótese:
+     NUMA/sincronização), e não num pico do peak.c exagerado.
+   -> Relatório (D26): intervalo 4.5-5.6 TF (40-49%), ~84% com 64 cores, e
+      o bind só colapsa com 2 runtimes OpenMP.
+
 
 ===============================================================================
  5. A100 (GPU)   (gpu_props + gpu_bench, job 2254959)

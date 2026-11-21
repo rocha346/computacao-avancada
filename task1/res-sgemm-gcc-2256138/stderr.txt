@@ -1,0 +1,4 @@
+n=1024, 0.00 GiB por matriz, 128 threads
+n=1024, 0.00 GiB por matriz, 128 threads
+n=1024, 0.00 GiB por matriz, 128 threads
+n=1024, 0.00 GiB por matriz, 128 threads

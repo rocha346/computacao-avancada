@@ -1,0 +1,8 @@
+	libopenblas.so.0 => /eb/x86_64/software/OpenBLAS/0.3.27-GCC-13.3.0/lib/libopenblas.so.0 (0x00007fdad44b4000)
+	libgomp.so.1 => /eb/x86_64/software/GCCcore/15.2.0/lib64/libgomp.so.1 (0x00007fdad544b000)
+== GFLOP/s por repeticao
+cfg=bindClose n=1024: 489.0 484.3
+cfg=bindSpread n=1024: 414.0 466.8
+cfg=livre n=1024: 20.8 19.1
+cfg=livreInterleave n=1024: 18.5 18.6
+RESUMO: 0 FALHOU   (resultados em res-sgemm-gcc-2256138/)
