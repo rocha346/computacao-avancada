@@ -1,0 +1,15 @@
+HISTORY.txt
+LICENSE.txt
+Makefile
+README.md
+README.original
+job-stream.sh
+kernel-openmp.c
+kernel-openmp.o
+kernel-vanilla.c
+kernel-zfill-acle.c
+kernel-zfill.c
+stream.c
+stream.h
+stream.o
+stream_openmp.exe

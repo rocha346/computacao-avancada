@@ -1,0 +1,60 @@
+== T=1
+CSV,arch,mode,threads,nacc,lanes,iters,seconds,GFLOPs,checksum
+CSV,x86-AVX2,fma,1,12,8,200000000,0.3551,108.13,193.056
+
+ Performance counter stats for 'build-x86-2253871/peak fma 200000000':
+
+        1275142033      cycles                    #    3.383 GHz                    
+            376.90 msec task-clock                #    0.990 CPUs utilized          
+
+       0.380743670 seconds time elapsed
+
+       0.372851000 seconds user
+       0.003971000 seconds sys
+
+
+== T=16
+CSV,arch,mode,threads,nacc,lanes,iters,seconds,GFLOPs,checksum
+CSV,x86-AVX2,fma,16,12,8,200000000,0.3669,1674.62,3088.9
+
+ Performance counter stats for 'build-x86-2253871/peak fma 200000000':
+
+       20517735378      cycles                    #    3.307 GHz                    
+           6204.12 msec task-clock                #   15.733 CPUs utilized          
+
+       0.394341494 seconds time elapsed
+
+       6.175128000 seconds user
+       0.017894000 seconds sys
+
+
+== T=64
+CSV,arch,mode,threads,nacc,lanes,iters,seconds,GFLOPs,checksum
+CSV,x86-AVX2,fma,64,12,8,200000000,0.4309,5703.89,12355.6
+
+ Performance counter stats for 'build-x86-2253871/peak fma 200000000':
+
+       82630988085      cycles                    #    2.806 GHz                    
+          29443.43 msec task-clock                #   63.027 CPUs utilized          
+
+       0.467154454 seconds time elapsed
+
+      29.296666000 seconds user
+       0.067505000 seconds sys
+
+
+== T=128
+CSV,arch,mode,threads,nacc,lanes,iters,seconds,GFLOPs,checksum
+CSV,x86-AVX2,fma,128,12,8,200000000,0.4337,11333.94,24711.2
+
+ Performance counter stats for 'build-x86-2253871/peak fma 200000000':
+
+      167050983966      cycles                    #    2.813 GHz                    
+          59385.97 msec task-clock                #  125.465 CPUs utilized          
+
+       0.473327565 seconds time elapsed
+
+      59.082384000 seconds user
+       0.126455000 seconds sys
+
+

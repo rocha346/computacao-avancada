@@ -1,0 +1,208 @@
+===============================================================================
+ BRAINSTORM - Task 1 (parte teórica e estratégia)                    20/11/2026
+ Cada tópico: o problema, as opções, a minha análise e a recomendação.
+ As decisões finais vão para decisoes.txt depois de o Rodrigo escolher.
+===============================================================================
+
+-------------------------------------------------------------------------------
+ 0. Primeiro, perceber o box27 (é a base para a 1.3 e a 1.4)
+-------------------------------------------------------------------------------
+Por ponto interior, uma iteração faz:
+  u_new = ( 14/30 * Σ6 faces + 3/30 * Σ12 arestas + 1/30 * Σ8 cantos + h²f ) / (128/30)
+
+Contagem de FLOPs (precisão simples):
+  - Código de referência (ingénuo): 26 multiplicações + 26 somas + ~3 (h²f e
+    divisão) ~ 55 FLOP/ponto. Usa double para a soma (!) e chama
+    stencil_weight() dentro do ciclo.
+  - Fatorizado (agrupar por tipo de vizinho): 5 + 11 + 7 = 23 somas dentro dos
+    grupos, 3 multiplicações pelos pesos, ~3 somas entre grupos, + h²f, x 1/w
+    ~ 30 FLOP/ponto.
+  -> Observação importante: o box27 tem MUITAS somas e POUCAS multiplicações
+     (~26 somas vs ~4 mult). Uma FMA (a*b+c) só ajuda quando há um produto
+     para fundir. Logo o pico com FMA é praticamente inatingível; o teto
+     realista de computação é ~metade do pico (só somas).
+
+Bytes por ponto (memória principal), versão ideal SoA com reutilização perfeita:
+  lê u (4 B) + lê f (4 B) + escreve u_new (4 B) + "write-allocate" de u_new (4 B)
+  = 16 B/ponto  -> intensidade aritmética ~ 30/16 ~ 1.9 FLOP/B
+  (com streaming stores, sem write-allocate: 12 B -> ~2.5 FLOP/B)
+
+Código de referência (AoS, struct Cell de 16 B {u, u_new, f, type}):
+  sweep lê 16 B e escreve a linha de volta (16 B), residual volta a ler 16 B,
+  update lê e escreve 16 B (32 B) -> ~80 B/ponto por iteração
+  -> intensidade ~ 55/80 ~ 0.7 FLOP/B: muito mais à esquerda no roofline.
+
+Reutilização em cache: para ler cada u apenas 1 vez da RAM, é preciso manter
+3 planos k-j em cache: 3 x (n+2)² x 4 B. Para n = 512: ~3 MiB.
+  - AMD: L2 é 512 KiB/core -> não cabe; L3 16 MiB por CCX (4 cores) -> cabe
+    só se poucos cores partilharem a mesma CCX.
+  - A64FX: L2 8 MiB por CMG, partilhada por 12 cores -> cabe à justa.
+  -> Sem "cache blocking" o tráfego real de u pode subir até ~3x. Isto é um
+     TETO DE MEMÓRIA relevante para a 1.3 e uma otimização para a Task 2.
+
+-------------------------------------------------------------------------------
+ 1. Unidade de comparação no roofline: nó inteiro ou 1 socket/chip?   [DECIDIDO D04: nó]
+-------------------------------------------------------------------------------
+O nó x86 tem 2 sockets (2x EPYC 7742); o nó ARM tem 1 chip A64FX.
+  a) Nó inteiro (2x7742 vs 1xA64FX): é o que o Slurm nos dá com --exclusive e
+     o que a Task 2 vai usar com OpenMP. Comparação "por nó" é justa em termos
+     de custo/energia por nó.
+  b) Por chip (1x7742 vs 1xA64FX): comparação de arquitetura "chip a chip",
+     mais limpa, sem efeitos NUMA entre sockets.
+Recomendação: (a) nó inteiro como roofline principal, e indicar a linha de
+1 socket como ceiling (é exatamente um "teto NUMA/afinidade" que ajuda a 1.3).
+
+-------------------------------------------------------------------------------
+ 2. Como medir o pico FP em PRECISÃO SIMPLES                          [DECIDIR]
+-------------------------------------------------------------------------------
+Problema: o HPL do Lab 2.5 mede DOUBLE precision. O roofline pedido é SINGLE.
+  a) HPL (DP) e multiplicar por 2: rápido, mas é uma suposição, não medição.
+  b) SGEMM de uma biblioteca (OpenBLAS/BLIS no AMD, SSL2 no A64FX): mede SP a
+     sério, perto do pico, com código otimizado pelo fabricante.
+  c) Microbenchmark próprio (ciclo de FMAs independentes em SIMD): mede o pico
+     "puro" e permite medir os tetos (sem SIMD, sem FMA, 1 core) com o MESMO
+     código, mudando só flags. Mais trabalho, mas dá os tetos da 1.3 medidos.
+Recomendação: (c) para os tetos + (b) como validação do pico. Se faltar tempo,
+só (b) e tetos calculados.
+
+-------------------------------------------------------------------------------
+ 3. Como medir a largura de banda por nível (L1, L2/LLC, RAM) [DECIDIDO D06: STREAM]
+-------------------------------------------------------------------------------
+  a) STREAM (como no Lab 2.5), com o tamanho do array escolhido para caber em
+     cada nível. Mesma ferramenta nas 2 máquinas -> comparável. No A64FX usar
+     a versão zfill (evita o write-allocate, Lab 2.5).
+  b) likwid-bench: mais preciso por nível, mas tem de existir no Deucalion e
+     o suporte ARM é mais limitado.
+  c) Intel Advisor: só funciona bem em x86 (e foi feito para Intel).
+Recomendação: (a) STREAM nas duas, com os mesmos tamanhos relativos.
+Nota crítica: o kernel Triad do STREAM lê 2 e escreve 1 (rácio 2:1), o box27
+lê 2 (u, f) e escreve 1 -> rácio parecido, logo Triad é a métrica certa.
+
+-------------------------------------------------------------------------------
+ 4. Como medir a latência da memória   [DECIDIDO D07: pointer chasing]
+-------------------------------------------------------------------------------
+  a) lat_mem_rd (lmbench): clássico, mas pode não estar instalado no ARM.
+  b) Pointer chasing próprio em C (lista ligada aleatória, ~50 linhas):
+     portável para x86 e ARM, mostra os "degraus" L1 -> L2 -> L3 -> RAM.
+  c) Só valores de datasheet: fraco para a 1.1 ("explain how").
+Recomendação: (b), dá-nos também a confirmação dos tamanhos das caches.
+
+-------------------------------------------------------------------------------
+ 5. Tetos da 1.3 para o box27 (proposta, ordenada como no artigo) [DECIDIDO D08]
+-------------------------------------------------------------------------------
+No artigo (Williams et al. 2008) os tetos são ordenados do MAIS PROVÁVEL de o
+compilador/programador conseguir (mais baixo) ao que exige mais esforço.
+Computação (de baixo para cima):
+  C1. 1 thread, sem SIMD (escalar)          - o código de referência está aqui
+  C2. todos os cores, sem SIMD              - paralelizar com OpenMP
+  C3. todos os cores, SIMD, sem FMA          - vetorizar; ~teto realista (box27
+                                               quase só faz somas)
+  C4. pico: SIMD + FMA                       - inatingível para o box27
+Memória (de baixo para cima):
+  M1. sem afinidade NUMA (first-touch errado) - dados todos num socket/CMG
+  M2. sem cache blocking (u lido ~3x da RAM)
+  M3. com write-allocate (stores normais)
+  M4. STREAM medido (teto real de banda)
+Discutir: a ordem C2/C3 muda entre as máquinas? No A64FX o SIMD é 16 lanes
+(SP) vs 8 no AMD, logo perder SIMD custa 2x mais no A64FX.
+
+-------------------------------------------------------------------------------
+ 6. Tamanhos para a 1.4 (box27 ref. = 16 B/ponto, com halo) [DECIDIDO D09]
+-------------------------------------------------------------------------------
+  L1:  AMD L1d 32 KiB  -> n = 10 (12³ x 16 B = 27 KiB)
+       A64FX L1d 64 KiB -> n = 13 (15³ x 16 B = 53 KiB)
+  LLC: AMD L3 16 MiB por CCX (1 thread só vê a sua CCX!) ; A64FX L2 8 MiB/CMG
+  RAM: > 1 GiB -> n >= 405 (gen_input.py --measure memory --round up)
+Pergunta: usamos o MESMO tamanho nas duas máquinas (comparável, mas o "L1" de
+uma não é o da outra) ou um tamanho POR máquina (cada um cabe no nível certo)?
+Recomendação: por máquina para L1 e LLC (o objetivo é isolar o nível), e o
+mesmo para RAM (n = 512 dá 2 GiB, potência de 2 ajuda a ver efeitos de
+alinhamento, mas atenção a conflitos de cache - a discutir).
+===============================================================================
+
+###############################################################################
+ ATUALIZAÇÃO 20/11/2026: mudámos para o VARCOEF (D13). As secções 0, 5 e 6
+ acima eram do box27 e ficam como histórico. As novas são 0b, 5b e 6b.
+###############################################################################
+
+-------------------------------------------------------------------------------
+ 0b. Perceber o varcoef
+-------------------------------------------------------------------------------
+Equação: -div(kappa grad u) = q, 7 pontos, kappa da face = média harmónica:
+  kappa_pq = 2 kp kq / (kp + kq)
+  u_new(p) = ( Σ6 kappa_pq u(q) + h² q(p) ) / Σ6 kappa_pq
+
+Estruturas da referência (varcoef/grid.cpp):
+  u (float, 4 B) + u_new (float, 4 B) + material (INT, 4 B) = 12 B/ponto
+  (o ficheiro de entrada guarda o material em uint8 = 1 B; a referência
+   alarga para int: 3 B desperdiçados por ponto)
+  Tabela de materiais: struct de ~64 B (nome + 4 doubles + id); só 4
+  materiais neste dataset -> cabe na L1.
+
+Problemas da referência (o que vamos otimizar e explicar):
+  P1. Ordem dos ciclos: for k / for j / for i, mas o índice mais rápido em
+      memória é k. O ciclo interior salta (ny+2)(nz+2) floats por acesso:
+      cada load é uma linha de cache nova -> desperdício de 15/16 da linha
+      no AMD (64 B) e 63/64 no A64FX (linha de 256 B!). O A64FX sofre mais.
+  P2. 7 divisões por ponto (6 harmónicas + 1 final), feitas em double.
+  P3. Acesso indireto materials[material[q]].conductivity (gather).
+  P4. jacobi_update copia u_new -> u (podia ser troca de ponteiros).
+  P5. Resíduo com std::pow(x, 2.0) em double, numa passagem separada.
+
+FLOPs por ponto (contando divisão como 1 FLOP, mas lembrar que é cara):
+  Referência: 6 x (2 mul + 1 add + 1 div) = 24  (médias harmónicas)
+              6 x (1 mul + 1 add)          = 12  (numerador)
+              6 adds                       =  6  (denominador)
+              h²q: 1 mul + 1 add, final: 1 div = 3
+              TOTAL ~ 45 FLOP/ponto, dos quais 7 divisões.
+
+Três estratégias possíveis (o trade-off central da Task 2):
+  E1. Recalcular tudo (como a referência, mas com ciclos certos e float):
+      ~45 FLOP e 7 div/ponto; bytes = u 4 + mat 1 (uint8) + u_new 4 + WA 4
+      = 13 B/ponto -> AI ~ 3.5 FLOP/B. Alta AI, MAS limitada pelas divisões.
+  E2. Tabela de pares: como há poucos materiais (4), kappa_pq só tem 4x4 =
+      16 valores diferentes. Pré-calculamos a tabela (L1) uma vez:
+      0 divisões harmónicas, só a final (ou multiplicar pelo inverso).
+      ~20 FLOP/ponto, mesmos 13 B -> AI ~ 1.5 FLOP/B.
+  E3. Coeficientes por ponto pré-calculados (3 faces por ponto + 1/den +
+      termo fonte): u_new = Σ w u + b -> ~14 FLOP (FMAs!), mas +16-20 B/ponto
+      -> AI ~ 0.4 FLOP/B: fortemente limitado por memória.
+  -> Lição crítica: a referência tem a MAIOR intensidade aritmética e é a
+     MAIS LENTA. AI alta não significa bom desempenho: o roofline simples
+     (só pico FMA) não vê o custo das divisões; por isso precisamos de um
+     TETO DE DIVISÃO.
+  -> Hipótese a testar: no AMD (DDR4, ridge ~22 FLOP/B) tudo é memory bound
+     e E2 ganha; no A64FX (HBM, ridge ~6, divisão SVE muito lenta) E2 ganha
+     ainda mais e E1 é desastrosa. E3 perde nas duas por ser só bytes.
+
+-------------------------------------------------------------------------------
+ 5b. Tetos da 1.3 para o varcoef (PROPOSTA)
+-------------------------------------------------------------------------------
+Computação (de baixo para cima):
+  C1. Divisões não vetorizadas (throughput da divisão escalar) <- referência
+  C2. 1 thread, escalar, sem divisões harmónicas (E2)
+  C3. todos os cores, escalar
+  C4. todos os cores, SIMD sem FMA
+  C5. pico SIMD + FMA (aqui é atingível em parte: num += kpq*u É uma FMA,
+      ao contrário do box27)
+  Nota: o teto de divisão depende muito da máquina: confirmar no manual de
+  otimização do Zen 2 e no "A64FX Microarchitecture Manual" a latência e o
+  throughput de FDIV (escalar e SIMD). [confirmar]
+Memória (de baixo para cima):
+  M1. acesso com stride (ordem de ciclos da referência): ~1 elemento útil
+      por linha de cache -> banda efetiva /16 (AMD) ou /64 (A64FX)
+  M2. NUMA errado (first-touch num só socket/CMG)
+  M3. com write-allocate
+  M4. STREAM medido
+  (o gather da tabela não é teto de memória: a tabela está na L1)
+
+-------------------------------------------------------------------------------
+ 6b. Tamanhos da 1.4 para o varcoef (referência 12 B/ponto, (n+2)³ pontos)
+-------------------------------------------------------------------------------
+  L1   AMD (32 KiB)     n = 11  -> 13³ x 12 B = 25.7 KiB
+       A64FX (64 KiB)   n = 14  -> 16³ x 12 B = 48 KiB  (n=15 dá 57.6 KiB,
+                                  apertado demais com 4-way)
+  LLC  AMD (16 MiB/CCX) n = 86  -> 7.8 MiB  (~metade da L3 da CCX)
+       A64FX (8 MiB/CMG) n = 68 -> 3.9 MiB  (~metade da L2 do CMG)
+  RAM  igual nas duas   n = 512 -> 1.52 GiB (> 1 GiB)  ou n = 500 -> 1.41 GiB
+       (n=500 evita potência de 2 e possíveis conflitos de cache)

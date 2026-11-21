@@ -1,0 +1,45 @@
+== T=1
+CSV,arch,mode,threads,nacc,lanes,iters,seconds,GFLOPs,checksum
+CSV,aarch64-SVE,fma,1,24,16,200000000,1.2058,127.38,776.832
+
+ Performance counter stats for 'build-arm-2253872/peak fma 200000000':
+
+        2547884468      cycles                    #    2.000 GHz                    
+           1273.97 msec task-clock                #    0.995 CPUs utilized          
+
+       1.280123986 seconds time elapsed
+
+       1.275379000 seconds user
+       0.000000000 seconds sys
+
+
+== T=12
+CSV,arch,mode,threads,nacc,lanes,iters,seconds,GFLOPs,checksum
+CSV,aarch64-SVE,fma,12,24,16,200000000,1.2181,1513.15,9321.98
+
+ Performance counter stats for 'build-arm-2253872/peak fma 200000000':
+
+       30328175373      cycles                    #    2.000 GHz                    
+          15164.46 msec task-clock                #   11.707 CPUs utilized          
+
+       1.295380336 seconds time elapsed
+
+      15.144536000 seconds user
+       0.020005000 seconds sys
+
+
+== T=48
+CSV,arch,mode,threads,nacc,lanes,iters,seconds,GFLOPs,checksum
+CSV,aarch64-SVE,fma,48,24,16,200000000,1.2167,6059.91,37287.9
+
+ Performance counter stats for 'build-arm-2253872/peak fma 200000000':
+
+      121277754249      cycles                    #    2.000 GHz                    
+          60639.77 msec task-clock                #   46.795 CPUs utilized          
+
+       1.295849265 seconds time elapsed
+
+      60.619202000 seconds user
+       0.019891000 seconds sys
+
+

@@ -1,0 +1,568 @@
+###############################################################################
+#                                                                             #
+#   TASK 1 - REVISÃO CRÍTICA ("PENTE FINO")                       21/11/2026  #
+#                                                                             #
+###############################################################################
+
+ O que foi revisto (tudo lido linha a linha, e conferido com os dados brutos
+ res-* que estão no PC):
+   - enunciado (Work Assignment 2, 1.1-1.4) e README/código do varcoef no
+     repositório do professor (github ampereira90/WA2-2026)
+   - decisoes.txt D00-D21, brainstorm_task1.txt, valores_teoricos.txt,
+     protocolo_testes_1.4.txt, analise_resultados_t1.txt
+   - bench/peak.c, triad.c, latency.c, sgemm.c, gpu_bench.cu, gpu_props.cu
+   - bench/job_t1_{x86,arm,gpu,gpu_bench}.sh, job_corr_{x86,arm}.sh, job_m2.sh,
+     test_*.sh, scripts/info_*.sh
+   - roofline/roofline.py e relatorio/roofline.py, relatorio_task1.tex e .pdf
+   - dados brutos: res-x86-2253871, res-arm-2253872, res-corr-x86-2254309,
+     res-gpu-2254323/2254959, res-m2-x86-2255630, res-m2-arm-2255631
+ NADA foi alterado: este ficheiro é o único criado.
+
+ Gravidade:
+   ERRO     = está errado ou contradiz os dados/o enunciado; corrigir antes de
+              entregar.
+   RISCO    = não está errado hoje, mas pode dar uma conclusão errada (no
+              relatório ou na Task 2) ou ser contestado pelo professor.
+   MELHORIA = está certo; fica mais forte/claro com a mudança.
+ Cada ponto tem: o problema, a PROVA (ficheiro:linha ou conta refeita) e a
+ correção proposta. Nenhuma correção é aplicada sem aprovação do Rodrigo.
+
+ Resumo em números: 8 ERROS, 10 RISCOS, 12 MELHORIAS.
+ Veredicto geral: os microbenchmarks estão BEM desenhados e os números
+ medidos são sólidos (batem com a microarquitetura a menos de 1-2%). Os
+ problemas estão quase todos na INTERPRETAÇÃO e na COERÊNCIA entre ficheiros
+ (relatório vs gráficos vs decisões), e em 2-3 pontos do 1.4 que vão afetar a
+ Task 2. Nada obriga a repetir as medições já feitas.
+
+ ÍNDICE
+   A. O que verifiquei e está CERTO (para teres confiança no que já existe)
+   B. ERROS
+   C. RISCOS
+   D. MELHORIAS
+   E. Comandos a correr no Deucalion (propostos, NÃO assumi resultados)
+   F. O que precisa da tua aprovação (vai em cartões de decisão)
+
+
+===============================================================================
+ A. VERIFICADO E CERTO
+===============================================================================
+
+ A1. Valores teóricos (valores_teoricos.txt) - todas as contas refeitas:
+     AMD: 2 FMA x 8 lanes x 2 = 32 FLOP/ciclo; 128 x 2.25 x 32 = 9 216 GFLOP/s;
+          DDR4-3200 x 8 canais x 8 B = 204.8 GB/s/socket, 409.6 no nó. OK.
+     A64FX: 2 x 16 x 2 = 64 FLOP/ciclo; 48 x 2.0 x 64 = 6 144; 4 x 256 =
+          1 024 GB/s. OK.
+     A100: 108 x 64 x 2 x 1.41 = 19.5 TFLOP/s; 1.215 GHz x 2 x 5120/8 =
+          1 555 GB/s. OK.
+     Ridges: 22.5 / 6.0 / 12.5 (teóricos) e 37.7 / 7.4 / 15.1 (medidos). OK.
+     Caches (L1 32 KiB 8-way, L2 512 KiB, L3 16 MiB/CCX; A64FX L1 64 KiB 4-way,
+     L2 8 MiB/CMG 16-way, linha 256 B; A100 192 KiB/SM, L2 40 MiB) confirmadas
+     pelo lscpu/lstopo (x86) e pelas curvas de latência (A64FX, A100).
+
+ A2. peak.c - o algoritmo está certo e foi a escolha certa:
+     - Nº de acumuladores: precisas de latência x nº de pipes FMAs "em voo".
+       Zen 2: 5 x 2 = 10 -> 12 usados; A64FX: 9 x 2 = 18 -> 24 usados. OK.
+       Registos: 12 + 2 (va, vb) de 16 ymm no AMD; 24 + 2 de 32 z no A64FX:
+       sem "spill" para a memória. OK.
+     - O asm volatile "" : "+x"/"+w" (KEEP) impede o compilador de juntar ou
+       apagar operações: a PROVA de que funcionou é que os resultados batem
+       com a teoria (fma 1 core AMD 108.22 = 32 x 3.383 GHz = 108.26).
+     - Valores a = 0.9999999, b = 1e-7: fma converge para ~1; muladd: as
+       cadeias de MUL descem para (1-1.19e-7)^1e8 = 6.7e-6 (não chega a
+       denormal, que seria lento); div sobe e^(2e7 x 1.2e-7) ~ 11x (AMD) /
+       e^0.6 (ARM): sem overflow para inf (inf podia dar divisões "rápidas").
+     - muladd: 6 cadeias MUL + 6 ADD no AMD (latência 3 x 2 pipes = 6: chega
+       à justa); no A64FX 24 cadeias para 18 necessárias. OK.
+     - sfma não foi vetorizado pelo GCC (-O2 vetoriza desde o GCC 12): a prova
+       é sfma = fma/8 no AMD (13.52 x 8 = 108.2) e fma/16 no A64FX.
+     - Contagem de FLOPs (fma = 2/lane; mul, add, div = 1/lane). OK.
+     - Conferi as medianas e IQR em res-*/peak.csv: TODOS os valores da
+       análise (secção 1) estão certos, IQR < 1.1% em tudo.
+     - Contas da divisão refeitas com mais casas decimais (o CSV só tem 2):
+       AMD sdiv 0.9635 GFLOP/s -> 3.38/0.9635 = 3.5 ciclos; A64FX sdiv
+       0.06858 -> 29.2 ciclos; div SVE 0.3248 GFLOP/s / 16 lanes = 0.0203 G
+       instruções/s -> 2.0/0.0203 = 98.5 ciclos. Batem com
+       a Table 16-2/16-3 do manual (29 e 98). C1 = 0.9635 x 45/7 = 6.19 e
+       0.06858 x 45/7 = 0.441 (relatório: 6.2 e 0.44). OK.
+
+ A3. triad.c - certo:
+     - arrays por thread, alocados e escritos pela própria thread (first
+       touch -> páginas no nó NUMA certo);
+     - tempo medido entre duas barreiras pelo master; calibração partilhada
+       (reps e t são shared e só o master escreve, entre barreiras): sem
+       data race;
+     - o asm "memory" entre repetições impede o compilador de perceber que
+       a[i] = b[i] + s*c[i] dá sempre o mesmo e fazer só 1 vez;
+     - 12 B/elemento = mesma convenção do STREAM. AMD RAM: triad 223.1 vs
+       STREAM 223.9 GB/s (0.4%).
+     - L1 AMD 1 thread: 285.4 GB/s / 3.38 GHz = 84 B/ciclo, abaixo do máximo
+       de 96 B/ciclo (2 loads + 1 store de 32 B). Plausível.
+
+ A4. latency.c - certo e foi a melhor escolha (pointer chasing com
+     permutação de Sattolo = 1 único ciclo aleatório; cada load depende do
+     anterior; o prefetcher não adivinha).
+     Subtileza que verifiquei: com STRIDE = 256 B no AMD (linha de 64 B), só
+     1 em cada 4 linhas é usada e só 1/4 dos "sets" da cache. Parecia um erro,
+     mas a pegada (S/4) e a capacidade útil (cache/4) dividem pelo mesmo 4,
+     por isso os degraus aparecem no sítio certo - e aparecem: 31 KiB 1.18 ns
+     -> 45 KiB 2.42 ns; 511 KiB 3.75 -> 724 KiB 9.38; 16 MiB 11.05 -> 23 MiB
+     92.9 ns. Conferido em res-x86-2253871/latency.csv e res-arm-2253872.
+     A64FX: 63 KiB 2.51 -> 90 KiB 24.7 (L1 64 KiB); 5.8 MiB 36.8 -> 8 MiB 115
+     (L2 8 MiB); joelhos de TLB a 1 MiB (25.1->27.7) e 64 MiB (145->163). OK.
+
+ A5. gpu_bench.cu - certo: pico com 8 FMAs independentes x 2048 threads/SM
+     (864 blocos de 256 = 1 só "onda"), triad 3 GiB com grid-stride, latência
+     com Sattolo (next[i] = perm[i] é 1 ciclo). Pico 19 188 GFLOP/s a
+     1410 MHz (20 de 26 amostras do nvidia-smi a 1410). Banda 1 274 GB/s
+     (82%). Conferido em res-gpu-2254959.
+
+ A6. STREAM: tamanhos certos (regra do STREAM: cada array >= 4x a LLC
+     total). AMD 2^28 doubles = 2 GiB/array = 4 x 512 MiB. A64FX 80e6 x 8 B
+     = 640 MB/array = 20x os 32 MiB. M2 (numactl --membind=0) bem desenhado:
+     6 GiB cabem nos 32 GiB do nó NUMA 0 do AMD; 1.9 GB nos 7.6 GB do CMG 0.
+
+ A7. Jobs Slurm: contas (...x / ...a / ...g) e partições (normal-x86,
+     normal-arm, dev-a100-40) certas; --exclusive nos CPUs; OMP_PLACES=cores
+     (o x86 tem SMT desligado: lscpu "Thread(s) per core: 1"); binários em
+     pastas build-<arch>-<jobid>; testes rápidos em dev-* antes dos longos;
+     cópia do STREAM pelo nome no job_m2.sh (linha 46) - a correção dos globs
+     ARM está no ficheiro do PC.
+
+ A8. Ordem dos tetos confirmada com números: C1 < C2 < C3 < C4 < C5 e
+     M1 < M2 < M3 < M4 nas duas máquinas.
+
+ A9. Tamanhos da D15 (contas refeitas): n=11 -> 13^3 x 12 B = 25.7 KiB;
+     n=14 -> 48 KiB; n=86 -> 7.80 MiB; n=68 -> 3.93 MiB; n=500 -> 1.414 GiB.
+     12 B/ponto confirmado no código: u float + u_new float + material INT
+     (varcoef/grid.cpp: malloc(n*sizeof(int))). O README do professor diz o
+     mesmo ("12 B/point (varcoef)").
+
+ A10. Relatório: 2 páginas, IEEEtran conference, em inglês (o enunciado pede
+     o mesmo template da Task 3); referências por ordem de aparição [1]-[6].
+     Os números que lá estão batem com a análise, exceto onde digo em B.
+
+ A11. Cruzamento que confirma o write-allocate (vale a pena pôr no texto,
+     ver D3): no A64FX o Copy "openmp" (com write-allocate) dá 549.6 GB/s;
+     549.6 x 24/16 = 824 GB/s de tráfego real, igual ao zfill (813). Duas
+     medições independentes contam a mesma história.
+
+
+===============================================================================
+ B. ERROS (corrigir antes de entregar)
+===============================================================================
+
+ B1. Relatório, secção III: "At the reference OI (~3) both CPUs are memory
+     bound, at about 0.7 TFLOP/s (AMD) and 1.8 TFLOP/s (A64FX)"
+     Problema: a REFERÊNCIA corre em 1 thread, escalar, com divisões em
+     double e acesso com stride. Não pode passar do C1 (6.2 / 0.44 GFLOP/s),
+     que o próprio relatório (secção IV, Tabela II) diz ser o teto dela. As
+     duas frases contradizem-se por um fator de ~100x (AMD) e ~4 000x (A64FX).
+     Além disso, "OI ~3" só conta o tráfego mínimo (compulsório) do sweep.
+     Prova (código do professor, varcoef/main.cpp e jacobi.cpp): cada
+     iteração faz sweep + jacobi_residual + jacobi_update:
+        sweep    lê u 4 + material 4, escreve u_new 4 (+4 write-allocate) = 16 B
+        residual lê u_new 4 + u 4                                         =  8 B
+        update   lê u_new 4, escreve u 4 (+4 write-allocate)              = 12 B
+        total 36 B/ponto (28 sem write-allocate); FLOPs 45 + 3 (resíduo) = 48
+        -> OI da referência completa = 48/36 = 1.33 FLOP/B (1.71 sem WA),
+           e isto ainda é o caso ideal: com o stride de um plano (n=500) o
+           tráfego real é muito maior.
+     Correção: (1) dizer que 0.7 / 1.8 TFLOP/s é o limite de uma versão
+     PARALELA com a mesma aritmética da referência (a estratégia E1), não da
+     referência; (2) nomear "OI do sweep, tráfego compulsório" e usar UM só
+     valor coerente com o telhado (ver C9): com o telhado M4 (bytes reais),
+     45/16 = 2.8 FLOP/B; o script relatorio/roofline.py:40 desenha 3.2, que
+     não é nenhum dos dois (é a meia distância entre 2.8 e 3.75).
+
+ B2. Relatório, secção IV: "The A64FX reference is thus capped near
+     2.2 Gpoints/s by divisions, 24x below what HBM could feed"
+     Problema: 2.2 Gpontos/s é para 48 cores com divisões SVE (16 lanes):
+     48 x 2.0e9 / (7 x 98 / 16) = 2.24e9. Isto é a E1 vetorizada e paralela,
+     não a referência. A referência (1 thread, escalar) fica em
+     2.0e9 / (7 x 29) = 9.9 Mpontos/s (com divisão FP32; em double é ainda
+     mais lenta, ver C1).
+     Correção: "a vectorised 48-core version that keeps the 7 divisions (E1)
+     is capped near 2.2 Gpoints/s...". A mesma frase está em
+     analise_resultados_t1.txt:131-134 (aí diz "código de referência").
+
+ B3. Relatório, Tabela I, linha "BW (GB/s)": AMD 409.6 / 224 mas
+     A64FX 1024 / 813.
+     Problema: mistura convenções. 224 é o STREAM a contar 24 B (COM
+     write-allocate a acontecer, sem o contar); 813 é o zfill (SEM
+     write-allocate). Lido lado a lado, sugere que o A64FX tem 3.6x a banda
+     do AMD; na mesma convenção é 2.7x (606/224 ou 813/299). E o gráfico e o
+     texto da secção III usam 299 para o AMD, não 224.
+     Correção: pôr os dois com a mesma convenção, p. ex. "409.6 / 299 (224)"
+     e "1024 / 813 (606)", com a nota "sem / com write-allocate".
+
+ B4. Relatório, Tabela I, linha "Clock": A100 "1.095 / 1.41"
+     Problema: na coluna "nominal" pões 1.095 GHz, mas o pico nominal da
+     mesma coluna (19 500) é calculado com 1.41 GHz. 1095 MHz é o "application
+     clock" por defeito, não o nominal (res-gpu-2254959/build.txt:
+     clocks.max.sm 1410, clocks.applications 1095).
+     Correção: "1.41 / 1.41" e deixar a história do 1095 só no texto.
+
+ B5. SGEMM: a conclusão "a causa principal era o BIND" não é suportada
+     pelos dados (analise_resultados_t1.txt:312, decisoes.txt D18(c),
+     relatório secção II: "OMP_PROC_BIND piled the OpenBLAS threads onto few
+     cores (15.7 GFLOP/s) until we removed it").
+     Prova (dados brutos, mesmo n = 8192, 128 threads):
+        job 2253871 COM bind=close : mediana 2 782 GFLOP/s (res-x86/sgemm.csv)
+        job 2254309 SEM bind       : mediana 2 916 GFLOP/s (res-corr-x86)
+        -> tirar o bind ganhou só 5%.
+        A subida para 5 558 veio de n = 16 384 (mais trabalho por thread).
+     O 15.7 do job 2254225 foi um caso com bind que NÃO se repetiu no job
+     2253871 (mesma configuração). O que os dados mostram é "com bind o
+     resultado é instável", não "o bind era a causa dos 25%".
+     Hipótese para o 15.7 (a verificar, comando em E): o OpenBLAS do módulo
+     é 0.3.32-llvm-compilers (modules.txt); se usar o runtime OpenMP do LLVM
+     (libomp) e o nosso programa o da GNU (libgomp), há DOIS runtimes OpenMP
+     no mesmo processo; as threads do OpenBLAS herdam a afinidade do master
+     (fixado no core 0 pelo OMP_PROC_BIND) e amontoam-se.
+     Correção do texto: "binding made the OpenBLAS threads unstable (once
+     15.7 GFLOP/s); without binding, a larger matrix (n=16384) reached 5558".
+
+ B6. Dois valores diferentes do teto C1 e duas figuras diferentes para a 1.3.
+     - roofline/roofline.py:52 e :70 (figuras da D21): C1 = 0.96 e 0.07
+       (só os FLOPs das divisões).
+     - relatorio/roofline.py:11 e :14 e Tabela II: C1 = 6.2 e 0.44
+       (divisões x 45/7).
+     - decisoes.txt D21(a) regista 0.96 / 0.07; não há decisão a registar a
+       mudança para x 45/7.
+     - D21 diz que a 1.3 vai em 2 painéis porque "os 18 tetos num só gráfico
+       ficavam ilegíveis"; o relatório usa UM só gráfico com todos os tetos.
+     Qual está certo? O x 45/7 é o mais correto: um teto de "mistura de
+     instruções" (como o "FP balance" do artigo) mede FLOPs TOTAIS por
+     segundo quando a unidade de divisão está saturada. Cada ponto faz 45
+     FLOPs, 7 deles divisões; os outros 38 correm noutros pipes em paralelo.
+     Por isso 0.96 subestima o teto 6.4x. O relatório já diz que é um limite
+     superior (por causa do double) - bem.
+     Correção: decidir (cartão) e alinhar os 3 sítios + nova decisão D22.
+
+ B7. Falta um item do 1.1(i): "Manufacturer, model" do NÓ (servidor), além
+     do CPU/GPU. O relatório só tem os chips. Os info-*.txt não têm o modelo
+     do servidor (info_common.sh não lê /sys/class/dmi/id).
+     O que eu sei (a CONFIRMAR, não medi): no Deucalion os nós ARM são
+     Fujitsu PRIMEHPC FX700 e os x86/GPU Atos (Eviden) BullSequana XH2000.
+     Correção: correr o comando E1 (lê sem root) e acrescentar 1 linha à
+     Tabela I.
+
+ B8. protocolo_testes_1.4.txt desatualizado (é o ficheiro aprovado na D12):
+     - linha 3: "Base: ... D08 (tetos), D09 (tamanhos)" - ambas SUBSTITUÍDAS
+       (D16, D15);
+     - linha 18: tamanhos "(D09)" -> devia ser D15;
+     - linha 42: "first-touch em série -> banda de 1 socket/CMG (teto M1,
+       D08)" -> hoje é o M2 (D16), e o medido (D20) é ABAIXO da banda de 1 nó;
+     - linha 53: "efeito do cache blocking (teto M2)" -> numeração do box27.
+     O relatório já tem a versão nova (Tabela III), por isso é só coerência
+     do registo; mas o professor valoriza o registo.
+     Correção: atualizar estas 4 linhas.
+
+
+===============================================================================
+ C. RISCOS
+===============================================================================
+
+ C1. A referência calcula em DOUBLE, o C1 foi medido com divisões FLOAT.
+     Prova: varcoef/jacobi.cpp - harmonic_mean(double,double), num/den em
+     double, conductivity é double. As 7 divisões são fdiv/divsd de 64 bits.
+     No A64FX a divisão escalar double tem latência maior que a float (29
+     ciclos); no Zen 2 a vdivpd/divsd também é mais lenta que a divss.
+     O relatório já diz "upper bound: the reference divides in double" - bem.
+     Risco: na Task 2.4 o ponto da referência vai para um roofline FP32 com
+     FLOPs em FP64. O README do professor permite mudar a precisão dos
+     intermédios ("precision of intermediate computations") mas exige u em
+     float para os rooflines FP32 servirem.
+     Proposta: (a) citar a latência FDIV double das mesmas tabelas do
+     manual (Table 16-2) e do guia AMD; ou (b) acrescentar ao peak.c os modos
+     "ddiv"/"sddiv" (double) e medir em 2 min (comando E5).
+
+ C2. O C2 ("sem divisões harmónicas, E2") ainda tem 1 divisão por ponto.
+     Na E2 (tabela de pares 4x4) sai das 6 harmónicas mas fica a final
+     u_new = num/den, com ~21 FLOPs/ponto. Contas:
+        A64FX, 1 thread escalar : 0.0686 G div/s x 21 = 1.4 GFLOP/s  (< C2 = 8.0)
+        A64FX, 48 cores SVE     : 15.4 x 21 = 324 GFLOP/s
+          vs telhado de memória na OI da E2: 1.6 x 813 = 1 300 GFLOP/s
+          -> 15.7 Gpontos/s pela divisão contra 62.5 Gpontos/s pela HBM
+        AMD, 1 thread           : 0.96 x 21 = 20 GFLOP/s (> C2 = 13.5, não limita)
+        AMD, todos, SIMD        : 988 x 21 = 20 700 (não limita)
+     Conclusão importante para a Task 2: no A64FX a E2 CONTINUA limitada
+     pela divisão (4x abaixo da HBM) se a divisão final for uma FDIV
+     verdadeira. É preciso a recíproca aproximada (FRECPE + 1-2 passos de
+     Newton, que o fcc -Kfast gera) para o A64FX ficar memory bound. No AMD
+     não faz diferença. O relatório diz "C2/C3 follow from removing
+     divisions": é verdade só no AMD.
+     Proposta: 1 frase no relatório (secção IV) + entrada no brainstorm/
+     protocolo (T5) para testar FDIV vs FRECPE+Newton no A64FX.
+
+ C3. Falta o teto de memória de 1 THREAD (a referência é sequencial).
+     O C1 e o C2 são de 1 thread, mas todos os tetos de memória (M1-M4) são
+     do nó inteiro. 1 thread só tira 22.0 GB/s da RAM no AMD e 49.8 no A64FX
+     (triad 1 thread, res-*/triad.csv). Com o stride: 22/16 = 1.4 GB/s e
+     49.8/64 = 0.8 GB/s - 10x e 12x ABAIXO do M1 desenhado (14 e 9.5).
+     A Tabela III espera para o T1 "near C1, M1": o ponto da referência vai
+     ficar muito abaixo do M1 e a explicação errada seria tentadora.
+     Proposta: acrescentar à Tabela II (ou só ao texto) "1 thread: 22 / 50
+     GB/s (M1 de 1 thread: 1.4 / 0.8)". Já está medido: não precisa de job.
+
+ C4. Tamanho "LLC" não isola a LLC quando corremos com todas as threads.
+     D15: AMD n=86 (7.8 MiB), A64FX n=68 (3.9 MiB) - certos para 1 thread.
+     Mas o T2 (escalabilidade forte) usa o tamanho LLC até 128/48 threads:
+        AMD 7.8 MiB / 128 threads = 61 KiB por thread -> cabe na L2 privada
+            (512 KiB): o "LLC" passa a ser um teste de L2.
+        A64FX 3.9 MiB / 48 = 82 KiB por thread -> perto da L1 (64 KiB).
+     O próprio Lab 2.5 pede "1 e 48 threads" para os 3 tamanhos.
+     Proposta: um 2º tamanho LLC para as corridas do nó inteiro:
+        AMD   n = 250 -> 183 MiB: 1.4 MiB/thread (> L2), 5.7 MiB por CCX
+              (< 16 MiB de L3), total < 512 MiB de L3 do nó;
+        A64FX n = 110 -> 16 MiB: 343 KiB/thread (> L1), 4 MiB por CMG
+              (= metade da L2, a mesma regra da D15).
+     (12 B/ponto; recalcular para a nossa estrutura de dados.)
+
+ C5. Tamanho RAM com pouca margem para versões otimizadas.
+     n = 500: 1.41 GiB com 12 B/ponto. Com material em uint8 (9 B/ponto,
+     estratégia já prevista) dá 1.06 GiB - passa à justa; com 8 B/ponto
+     (ex.: material compactado/derivado) dá 0.94 GiB < 1 GiB e deixa de
+     cumprir o enunciado ("> 1GiB"). D15 já diz "recalcular", mas convém
+     escolher já com margem.
+     Proposta: n = 520 (1.59 GiB a 12 B; 1.19 GiB a 9 B), também não é
+     potência de 2. Ou manter 500 e escrever no protocolo o limite.
+
+ C6. Compilador: os scripts pedem GCC/13.3.0 mas correu o GCC 15.2.0.
+     Prova: res-*/build.txt "gcc 15.2.0 (/eb/.../GCCcore/15.2.0)" em x86 E
+     ARM; modules.txt mostra numactl/2.0.19-GCCcore-15.2.0 e
+     OpenBLAS/0.3.32-llvm-compilers-21.1.8 a trocarem o GCCcore. O
+     relatório diz 15.2 (bem), mas para a Task 2 (reprodutibilidade, 1.4)
+     os scripts dizem uma coisa e corre outra.
+     Proposta: nos scripts da Task 2, carregar EXPLICITAMENTE a versão que
+     se quer (p. ex. ml GCC/15.2.0, se existir) e manter o registo
+     gcc -dumpfullversion + ml -t list em cada job (já fazem nalguns).
+
+ C7. Frequência a mudar com o nº de cores (AMD) vai distorcer o T2.
+     Prova: freq.txt x86: 1 core 3.383 GHz, 16 cores 3.307, 64 cores 2.806,
+     128 cores 2.813. Um speedup de 1 -> 128 threads já perde 17% só pelo
+     clock. Sem medir os ciclos, isto parece "overhead de paralelização".
+     Proposta: no T2/T7 correr com perf stat -e cycles,task-clock e reportar
+     também eficiência por ciclo. Bom ponto de pensamento crítico.
+
+ C8. Profilers e energia prometidos mas não confirmados no Deucalion.
+     O relatório (1.4) promete perf, PAPI, fapp, AMD uProf, Nsight, RAPL,
+     Slurm energy. Só o perf foi confirmado (freq.txt nos 2 CPUs). A D11 já
+     dizia "Confirmar no Deucalion que módulos existem" - ficou por fazer.
+     RAPL pelo perf precisa de permissões (perf_event_paranoid); o
+     ConsumedEnergy do sacct só existe se o Slurm tiver o plugin de energia.
+     Proposta: comando E3 (1 min em dev). Se algo não existir, tirar do
+     relatório antes de entregar (o professor pode pedir os resultados).
+
+ C9. Convenção dos bytes: write-allocate e stride como TETOS de banda.
+     No artigo de Williams et al., o tráfego extra (write-allocate,
+     capacidade, conflitos) é tratado como "paredes" de intensidade
+     aritmética (o ponto do kernel anda para a ESQUERDA, porque há mais
+     bytes), e os tetos de banda são coisas como "unit stride / prefetch",
+     "NUMA/affinity" (confirma no artigo, secção dos "3Cs"/arithmetic
+     intensity walls). Nós desenhamos o write-allocate (M3) e o stride (M1)
+     como bandas mais baixas. Isto é VÁLIDO desde que a OI do x conte só os
+     bytes "úteis" (sem write-allocate, um elemento por acesso). Mas o
+     telhado é o M4 = bytes REAIS. Se na Task 2.4 a OI for calculada com
+     bytes reais (16 B/ponto) E o ponto for comparado com o M3, o
+     write-allocate fica contado duas vezes.
+     Proposta mínima: 1 frase no relatório a fixar a convenção ("OI counts
+     useful bytes; M3 and M1 are effective-bandwidth ceilings for that
+     count"), e usar sempre a mesma na Task 2.4. Alternativa: redesenhar como
+     paredes, à letra do artigo (mais trabalho, ganho discutível).
+
+ C10. Dados brutos em falta no PC (rastreabilidade).
+     Não existem localmente res-corr-arm-2254226 nem nada do job 2254225.
+     É daí que vêm o M4 do A64FX (zfill 813, o TELHADO do roofline!), o M3
+     (606 openmp), o triad L2 corrigido (2 680) e o PAGESIZE do ARM. Hoje
+     ninguém consegue conferir esses números a partir do PC.
+     Proposta: copiar do Deucalion (comando E2).
+
+
+===============================================================================
+ D. MELHORIAS
+===============================================================================
+
+ D1. Tabela I sem o tamanho de linha (64 / 256 / 128 B) - é ele que explica
+     o M1 (1/16 vs 1/64). Também faltam associatividade e "SMT off" no x86.
+     O 1.1(iii) pede "cache details".
+
+ D2. LLC da A100 sem banda ("--") e o 1.1(iii) pede "memory access
+     bandwidth (from the LLC on chip)" para CPU E GPU. Um modo "l2" no
+     gpu_bench (triad com 3 x 4 MiB = 12 MiB, repetido ~1000x dentro de um
+     só cudaEvent) mede-a em ~1 min na dev-a100-40.
+
+ D3. Prova mais forte de que o Copy do AMD não tem write-allocate: se
+     tivesse, o tráfego real seria 298 x 24/16 = 447 GB/s > 409.6 teórico,
+     o que é impossível. É um argumento de 1 linha que fecha a questão (hoje
+     o texto só diz "non-temporal stores"). E no A64FX: Copy openmp
+     549.6 x 24/16 = 824 ~ zfill 813 (A11).
+
+ D4. "Each value is the median of 10 runs; IQR below 1% except where noted":
+     - o STREAM reporta o MELHOR de 19 (regra do STREAM), não a mediana. A
+       diferença é pequena (Triad AMD: tempo médio 0.028935 vs mínimo
+       0.028773 = 0.6%; membind0: 4%), mas deve ser dito;
+     - SGEMM n=16384: IQR 280/5558 = 5% (não "noted");
+     - "STREAM and our Triad agree within 1%": verdade no AMD (0.4%); no
+       A64FX triad 614.6 vs STREAM 606 (openmp) = 1.4% e vs 635 (1º job) =
+       3.3%.
+
+ D5. "a short test that stayed at 1095 MHz gave exactly the scaled peak":
+     14 460 medido vs 19 188 x 1095/1410 = 14 901 -> 97%, não "exactly".
+     (o kernel do teste dura 0.245 ms: o arranque do kernel pesa ~2%).
+     Escrever "within 3%".
+
+ D6. Explicação não medida: "div e sdiv escalam 128x perfeitamente (a
+     unidade de divisão não é afetada pela descida de clock)"
+     (analise:96-97). O mais provável é o contrário: com só divisões o chip
+     gasta pouca energia e o clock NÃO desce (fica ~3.3-3.4 GHz); com FMAs
+     em 4 pipes (muladd) gasta mais e desce mais - o que também explica o
+     C4 ficar em 93% do C5 com 128 cores (no 1 core são iguais). O perf só
+     mediu a frequência no modo fma (job_t1_x86.sh:60).
+     Proposta: medir a frequência em div e muladd (comando E5) ou escrever
+     "provavelmente, por consumirem menos energia, o clock mantém-se".
+
+ D7. Citação do uops.info: o artigo ASPLOS 2019 é sobre microarquiteturas
+     INTEL; os números do Zen 2 vêm do site. Citar "uops.info, Zen 2 tables,
+     accessed Nov. 2026" (ou as duas coisas).
+
+ D8. Figura do relatório (relatorio/roofline.png): 18 linhas num só
+     gráfico, rótulos sobrepostos (AMD "M2/M1" encostados, "M3" do AMD em
+     cima do C5), eixo x em log2 e y em log10, sem os telhados teóricos que
+     o texto discute (22.5 / 6.0). Ver o cartão sobre a figura.
+
+ D9. Validação cruzada barata com a ferramenta da UC: o Lab 2 usa o Intel
+     Advisor ("advisor --collect roofline"), que mede picos e bandas por
+     nível de cache no x86. Um run no AMD compara o nosso roofline empírico
+     com o do Advisor (o Advisor no AMD tem limitações - é pensamento
+     crítico à mesma). Alternativa conhecida na literatura: o ERT (Empirical
+     Roofline Toolkit, LBNL). Opcional.
+
+ D10. Banda da A100: 82% é razoável; com loads float4 (16 B por thread) e
+     mais bytes em voo costuma chegar a ~85-90%. A referência habitual é o
+     BabelStream. Opcional; não muda nenhuma conclusão.
+
+ D11. valores_teoricos.txt: "64 cores / 128 threads (SMT2) por socket" -
+     no Deucalion o SMT está DESLIGADO (lscpu: 1 thread por core, 128 CPUs
+     no nó); e a nota "é relevante para o box27 (D01)" já não se aplica.
+
+ D12. Arrumação: scripts/info_*.sh ainda têm "--account=CHANGE_ME_x/a/g"
+     (não correm assim; as cópias usadas no Deucalion tinham a conta certa);
+     a pasta task1/mei.2026.pg65437@login.deucalion.macc.fccn.pt/ é o
+     resultado de um scp sem ":" (cópia local por engano) e pode ir para o
+     lixo; os binários build-*/ ficaram no Deucalion (bem).
+
+
+===============================================================================
+ E. COMANDOS PARA O DEUCALION (propostos; correr com o coordenador)
+===============================================================================
+ (nenhum resultado foi assumido; tudo curto, partições dev)
+
+ E1. Modelo do nó (B7) - 3 linhas, sem root, uma por partição:
+       srun -A f202500010hpcvlabuminhox -p dev-x86 -N1 -t 2 \
+         cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name
+       srun -A f202500010hpcvlabuminhoa -p dev-arm -N1 -t 2 \
+         cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name
+       srun -A f202500010hpcvlabuminhog -p dev-a100-40 -N1 --gpus=1 -t 2 \
+         cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name
+     (se no ARM /sys/class/dmi não existir: cat /proc/device-tree/model)
+
+ E2. Copiar os dados brutos em falta (C10), no WSL, na pasta task1:
+       scp -r "mei.2026.pg65437@login.deucalion.macc.fccn.pt:~/bench/res-corr-arm-2254226" .
+       scp "mei.2026.pg65437@login.deucalion.macc.fccn.pt:~/bench/t1-corr-*.out" .
+     (confirmar primeiro com ls ~/bench no Deucalion o nome exato)
+
+ E3. Profilers e energia (C8), num nó dev de cada CPU:
+       ml spider PAPI; ml spider uProf; ml spider Advisor; ml spider Nsight
+       command -v fapp fipp; cat /proc/sys/kernel/perf_event_paranoid
+       perf list 2>/dev/null | grep -i -E "power|energy"
+       sacct -j 2255630 -o JobID,ConsumedEnergy,Elapsed
+
+ E4. Hipótese do SGEMM (B5), no login x86 depois de ml GCC/13.3.0 OpenBLAS:
+       ldd ~/bench/build-corr-x86-2254309/sgemm | grep -i -E "omp|blas"
+     Se aparecer libomp E libgomp: confirmado (2 runtimes OpenMP).
+
+ E5. (só se aprovares mudar código) frequência por modo + divisão double:
+       perf stat -e cycles,task-clock ./peak div 20000000 (e muladd)
+     e modos ddiv/sddiv no peak.c. ~5 min em dev-x86 e dev-arm, com teste
+     rápido antes, como sempre.
+
+
+===============================================================================
+ F. O QUE PRECISA DA TUA APROVAÇÃO (vai em cartões de decisão)
+===============================================================================
+   1. Correções de texto/tabelas do relatório (B1-B5, C2, C3, D3-D5, D7):
+      passar à thread do relatório para aplicar.
+   2. Teto C1 e figura da 1.3 (B6): qual valor e qual figura ficam.
+   3. Convenção dos bytes (C9): nota no texto ou redesenhar como paredes.
+   4. Job curto no Deucalion: E1-E4 (sem mudar código) e/ou E5 + D2
+      (mudam código).
+   5. Protocolo 1.4: tamanhos LLC do nó (C4), margem do RAM (C5), módulos
+      fixos (C6), ciclos no T2 (C7), corrigir o ficheiro (B8).
+###############################################################################
+ ADENDA 21/11/2026 11:40 - estado depois das decisões
+   - Aprovado: correções do relatório (aplicadas pela thread do relatório),
+     D22 (protocolo), D23 (C1 x45/7, um só gráfico), D24 (OI em bytes úteis).
+   - B1 atualizado pela D24: com bytes ÚTEIS a OI do sweep da referência é
+     45/12 = 3.75 (não 2.8); a E2 com material em 1 byte é 21/9 = 2.3. Os
+     limites da E1 (3.75 x M3 = 0.84 / 2.3 TFLOP/s) são iguais a 2.8 x M4.
+   - analise_resultados_t1.txt:131 corrigido (E1, não referência).
+   - brainstorm_task1.txt mantém os valores antigos (OI ~3.5, E2 ~1.5) como
+     histórico; valem os da D24.
+   - Pendente: E1-E4 no Deucalion (com o coordenador).
+###############################################################################
+ ADENDA 21/11/2026 11:45 - resultados de E1, E3 e E4 (Rodrigo, Deucalion)
+   E1 (B7): nó x86 = Bull SAS H262-Z61-00 (chassis 2U de 4 nós, de origem
+       Gigabyte); nó ARM = FUJITSU FX700 (confirma o que eu tinha). Nó A100:
+       não medido (fila longa) -> usar a documentação do Deucalion ou repetir
+       mais tarde.
+   E3 (C8), nó dev-x86:
+       - PAPI existe (PAPI/7.1.0-GCCcore-13.3.0 ... 7.2.0-GCCcore-15.2.0).
+       - AMD uProf e Intel Advisor NÃO existem como módulo -> tirar o uProf
+         do relatório (e o Advisor sai da D9 da revisão).
+       - perf_event_paranoid = -1 e perf tem power/energy-pkg, energy-cores,
+         energy-ram: RAPL pelo perf funciona -> energia no AMD OK.
+       - sacct ConsumedEnergy = 0 -> o Slurm NÃO regista energia: tirar
+         "Slurm" das fontes de energia no relatório.
+       - Nsight: não há módulo próprio; normalmente nsys/ncu vêm com o módulo
+         CUDA (verificar: ml CUDA; command -v nsys ncu, no nó GPU).
+       - Por verificar no ARM: fapp/fipp e perf (energia do A64FX).
+   E4 (B5): o ldd mostrou só libgomp + OpenBLAS 0.3.27, MAS foi corrido
+       depois de "ml OpenBLAS/0.3.27-GCC-13.3.0": o ldd resolve as bibliotecas
+       pelos módulos carregados AGORA, não pelos do job (que usou o
+       OpenBLAS/0.3.32-llvm-compilers). O teste é inconclusivo. Teste certo:
+         ml purge; ml GCC/13.3.0 OpenBLAS      (o default, 0.3.32-llvm)
+         ldd ~/bench/build-corr-x86-2254309/sgemm | grep -i -E "omp|blas"
+         readelf -d $(ldd ~/bench/build-corr-x86-2254309/sgemm | awk '/openblas/{print $3}') | grep NEEDED
+       De qualquer forma, o texto corrigido do relatório (B5) já não depende
+       desta hipótese.
+###############################################################################
+ ADENDA 21/11/2026 11:50 - E2: dados brutos do job 2254226 conferidos
+   (C10 resolvido) res-corr-arm-2254226 já está no PC. Confere tudo:
+     STREAM 48t Triad: zfill 812.9, zfill-acle 811.8, openmp 606.3 GB/s
+       (análise: 813 / 812 / 606) OK; Copy openmp 549.3 x 1.5 = 824 ~ zfill.
+     triad L2: 256 KiB/thread 1t 66.0 | 12t 705.9 | 48t 2680.2 GB/s,
+       IQR <= 0.06% (análise: 66.0 / 706 / 2680) OK.
+     PAGESIZE = 65536 e THP = never no ARM (análise sec. 2) OK.
+   Nota: o zfill 48t tem o tempo médio 2.6% acima do mínimo (avg 0.002424 vs
+     min 0.002362 s): o M4 = 813 é o "best rate" do STREAM; pela média seria
+     ~792 GB/s. Coberto pela frase da D4 (STREAM = melhor de 19).
+   Falta: o 15.7 GFLOP/s do job 2254225 não está em nenhum ficheiro do PC
+     (o .out só tem o TIMEOUT); se existir res-corr-x86-2254225 no Deucalion,
+     copiar também (opcional: o relatório já só diz "once 15.7").
+###############################################################################
+ ADENDA 21/11/2026 11:50 - E4 refeito e ferramentas do ARM
+   E4 (B5) CONFIRMADO: com o OpenBLAS do job (0.3.32-llvm-compilers-21.1.8)
+     o sgemm carrega libgomp.so.1 (GCCcore 15.2.0) E libomp.so (LLVM 21.1.8):
+     2 runtimes OpenMP no mesmo processo. O OMP_PROC_BIND do libgomp prende o
+     master; as threads do libomp (OpenBLAS) não respeitam/herdam isso de forma
+     previsível -> resultados instáveis (2 782 num job, 15.7 noutro).
+     Para a Task 2: usar o OpenBLAS/0.3.27-GCC-13.3.0 (só libgomp, conferido
+     no 1º ldd) sempre que se usar BLAS com OpenMP.
+   ARM (dev-arm): fapp/fipp NÃO estão no PATH sem módulos; perf existe
+     (/usr/bin/perf, perf_event_paranoid = 0). O fapp costuma vir com o
+     módulo do compilador Fujitsu: confirmar com
+       ml FJSVstclanga; command -v fapp fipp
+     Se não existir, a energia do A64FX fica sem fonte confirmada e tem de
+     sair do relatório (ou ficar como "a confirmar").
+###############################################################################

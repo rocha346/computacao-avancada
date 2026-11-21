@@ -1,0 +1,13 @@
+gcc 15.2.0
+gcc -c -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=vanilla -o stream.o stream.c
+gcc -c -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=vanilla -o kernel-vanilla.o kernel-vanilla.c
+gcc -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=vanilla -o stream_vanilla.exe stream.o kernel-vanilla.o
+gcc -c -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=openmp -o stream.o stream.c
+gcc -c -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=openmp -o kernel-openmp.o kernel-openmp.c
+gcc -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=openmp -o stream_openmp.exe stream.o kernel-openmp.o
+gcc -c -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=zfill -o stream.o stream.c
+gcc -c -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=zfill -o kernel-zfill.o kernel-zfill.c
+gcc -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=zfill -o stream_zfill.exe stream.o kernel-zfill.o
+gcc -c -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=zfill-acle -o stream.o stream.c
+gcc -c -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=zfill-acle -o kernel-zfill-acle.o kernel-zfill-acle.c
+gcc -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=zfill-acle -o stream_zfill-acle.exe stream.o kernel-zfill-acle.o

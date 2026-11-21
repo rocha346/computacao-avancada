@@ -1,0 +1,13 @@
+Nome                      : NVIDIA A100-SXM4-40GB (compute capability 8.0)
+SMs                       : 108
+Clock SM (max)            : 1410 MHz
+Memoria global            : 39.5 GiB
+Clock memoria             : 1215 MHz, bus 5120 bits
+L2                        : 40.0 MiB
+Shared memory por SM      : 164 KiB
+Registos por SM           : 65536
+Max threads por SM        : 2048
+Warp                      : 32
+Pico FP32 calculado       : 19.5 TFLOP/s (SMs x 64 x 2 x clock)
+Banda calculada           : 1555 GB/s (2 x clock mem x bus/8)
+Ridge point FP32          : 12.5 FLOP/B

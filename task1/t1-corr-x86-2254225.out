@@ -1,0 +1,2 @@
+>> sgemm (n = 8192 16384, 10 reps, 128 threads)
+slurmstepd: error: *** JOB 2254225 ON cnx206 CANCELLED AT 2026-11-20T18:40:17 DUE TO TIME LIMIT ***

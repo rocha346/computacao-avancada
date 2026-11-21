@@ -1,0 +1,438 @@
+###############################################################################
+#                                                                             #
+#   TASK 1 - ANÁLISE DOS RESULTADOS MEDIDOS NO DEUCALION                      #
+#                                                                             #
+###############################################################################
+
+ Jobs usados:   x86 2253871  |  ARM 2253872  |  GPU 2253814
+                correções: ARM 2254226, x86 2254225 / 2254309, GPU 2254323 / 2254959
+                teto M2:   x86 2255630, ARM 2255631
+ Data:          20/11/2026
+ Estatística:   MEDIANA de 10 repetições (a rep=0 é aquecimento e é descartada);
+                IQR entre parênteses quando interessa (D10).
+ Compilador:    GCC 15.2.0 de facto (não o 13.3: o ml numactl/OpenBLAS troca o
+                GCCcore). Registar assim no relatório.
+
+ ÍNDICE
+   0. Resumo numa página
+   1. Pico e tetos de cálculo
+   2. Latência e caches
+   3. Banda de memória
+   4. SGEMM (validação do pico)
+   5. A100 (GPU)
+   6. Números para o roofline
+   7. Estado das medições
+   A. Porque é que os jobs foram tão rápidos
+
+
+===============================================================================
+ 0. RESUMO NUMA PÁGINA
+===============================================================================
+
+ +-------------------------+-------------+-------------+-------------+
+ |                         | AMD 7742 x2 | A64FX       | A100        |
+ +-------------------------+-------------+-------------+-------------+
+ | Pico FP32 teórico       |  9 216      |  6 144      | 19 500      |  GFLOP/s
+ | Pico FP32 medido        | 11 269      |  6 049      | 19 188      |  GFLOP/s
+ | Banda teórica           |  409.6      |  1 024      |  1 555      |  GB/s
+ | Banda medida (M4, D21)  |  299        |  813        |  1 274      |  GB/s
+ | STREAM Triad (M3)       |  224        |  606        |  -          |  GB/s
+ | Banda c/ NUMA errado(M2)|  22.6       |  87.7       |  -          |  GB/s
+ | Ridge medido (D21)      |  37.7       |  7.4        |  15.1       |  FLOP/B
+ | Latência da memória     |  ~105 ns    |  144 ns     |  ~410 ns    |
+ +-------------------------+-------------+-------------+-------------+
+
+ As 6 descobertas principais:
+   1. Clock real: o AMD corre a ~2.8 GHz com AVX2 em todos os cores (acima
+      da base 2.25) e a A100 a 1410 MHz sob carga (não 1095). O pico depende
+      do clock REAL, que é preciso medir.
+   2. Sem FMA: o AMD quase não perde (93%); o A64FX perde metade.
+   3. Divisões: custam 14x o pico no AMD e 393x no A64FX. No A64FX o código
+      de referência fica limitado pelas divisões.
+   4. Write-allocate custa ~25% da banda: medido no A64FX (zfill 813 vs
+      openmp 606) e no AMD (Copy NT 298 vs Triad 224).
+   5. NUMA errado (toda a memória num nó): a banda cai ~10x no AMD e ~7x no
+      A64FX. A inicialização paralela (first touch) é obrigatória.
+   6. As curvas de latência revelam o que o Linux não mostra: L1 64 KiB e
+      L2 8 MiB do A64FX, páginas de 64 KiB (TLB), e a L2 da A100 dividida em
+      2 metades de 20 MiB.
+
+
+===============================================================================
+ 1. PICO E TETOS DE CÁLCULO   (peak.c, GFLOP/s, FP32)
+===============================================================================
+
+ +-----------------------+------------+----------+------------+-----------+
+ | Modo (teto)           | AMD 1 core | AMD 128c | A64FX 1c   | A64FX 48c |
+ +-----------------------+------------+----------+------------+-----------+
+ | fma    (C5 pico)      |   108.2    |  11 269  |   127.2    |   6 049   |
+ | muladd (C4 sem FMA)   |   108.2    |  10 536  |    63.7    |   3 022   |
+ | add                   |    54.1    |   6 219  |    63.7    |   3 025   |
+ | sfma   (C2/C3 escal.) |    13.5    |   1 589  |     8.0    |     379   |
+ | lat    (1 acumulador) |    10.8    |   1 384  |     7.1    |     336   |
+ | div    (C1, SIMD)     |     7.72   |     988  |     0.32   |    15.4   |
+ | sdiv   (escalar)      |     0.96   |     123  |     0.07   |     3.3   |
+ +-----------------------+------------+----------+------------+-----------+
+
+ Frequência medida com perf (AMD):
+   1c 3.38 | 16c 3.31 | 64c 2.81 | 128c 2.81 GHz
+ A64FX: frequência FIXA 2.000 GHz em 1, 12 e 48 cores (sem turbo).
+
+ 1.1 Os números são plausíveis? (tudo bate com a microarquitetura)
+ -----------------------------------------------------------------
+   * AMD fma 1 core: 108.2 = 32 FLOP/ciclo x 3.38 GHz (perf: 3.383 GHz). OK.
+   * AMD 128 cores: 11 269 = 128 x 32 x 2.75 GHz; o perf mediu 2.81 GHz.
+       -> com AVX2 em todos os cores o clock fica em ~2.8 GHz: ACIMA da base
+          (2.25) e abaixo do boost (3.4).
+       -> pico medido = 122% do teórico-base (9 216). É o caso previsto na D14.
+   * A64FX 48 cores: 6 049 = 98.5% do teórico (6 144). Excelente.
+   * Escalar (sfma) = 1/8 do pico no AMD e 1/16 no A64FX (largura SIMD 8 vs 16).
+   * "add" = metade nas duas máquinas, por razões diferentes:
+       AMD: só há 2 pipes de ADD;  A64FX: cada instrução vale 1 FLOP em vez de 2.
+   * Latência da FMA (modo lat):
+       AMD:   108.2 / 10.8 = 10  -> 5 ciclos x 2 pipes
+       A64FX: 16 lanes x 2 FLOP / (7.08 / 2.0) = 9.0 ciclos
+       Batem com os manuais (5 e 9) e justificam os 12 e 24 acumuladores.
+   * Escalamento: div e sdiv escalam 128x / 48x perfeitamente (a unidade de
+     divisão não é afetada pela descida de clock da mesma maneira).
+
+ 1.2 Hipótese do C4 (sem FMA): CONFIRMADA
+ ----------------------------------------
+   AMD:   muladd = fma (1 core) e 93% (128 cores). O Zen 2 tem 2 pipes de
+          MUL/FMA + 2 pipes de ADD separados: mul + add separados fazem as
+          mesmas 32 FLOP/ciclo que a FMA. No AMD o teto "sem FMA" ~ pico.
+   A64FX: muladd = 50% do pico. Os 2 pipes do A64FX fazem FMA OU mul OU add:
+          sem FMA perde-se metade.
+   -> Mesmo teto (D16), significado diferente em cada máquina: ótimo ponto de
+      "pensamento crítico" para o relatório.
+
+ 1.3 Divisões: o achado mais importante para o varcoef
+ -----------------------------------------------------
+   +--------+-------------------------------------+----------+
+   |        | custo medido                        | pico/div |
+   +--------+-------------------------------------+----------+
+   | AMD    | 1 vdivps (8 lanes) a cada 3.5 ciclos|   14x    |
+   |        | escalar também 3.5 ciclos           |          |
+   | A64FX  | 1 fdiv SVE (16 lanes) a cada ~98    |  393x(!) |
+   |        | ciclos; escalar ~29 (não pipelined) |          |
+   +--------+-------------------------------------+----------+
+   (AMD: 108.2/7.72 = 14x;  A64FX: 6049/15.4 = 393x)
+   CONFIRMADO nas fontes (21/11/2026):
+     A64FX Microarchitecture Manual v1.7 (Fujitsu, 2022):
+       Table 16-3 (SVE), p.122: FDIV <T>=S, 512 bits -> latência 98, "E"
+         (operation blocking: a divisão seguinte só entra quando esta acaba),
+         só no pipe FLA  => 1 divisão SVE a cada 98 ciclos.
+       Table 16-2 (SIMD&FP), p.107: FDIV escalar <R>=S -> 29, "E", FLA.
+       Table 16-3, p.124: FMLA (vetor) -> latência 9 (confirma o modo lat).
+     Zen 2: uops.info (VDIVPS ymm, DIVPS xmm, DIVSS): latência <=10,
+       throughput medido 3.50 ciclos (igual ao nosso). O guia da AMD (56305)
+       indica latência 10 e throughput 5: a medição dá melhor que o guia.
+
+   Consequência (estimativa para uma versão PARALELA E VETORIZADA que mantém
+   as 7 divisões/ponto = estratégia E1; NÃO é a referência, que é 1 thread,
+   escalar e em double: ~2.0e9/(7x29) = 9.9 Mpontos/s no A64FX. Revisão B2/D23):
+     A64FX: 7/16 x 98 = ~43 ciclos/ponto só em divisões -> ~2.2 Gpontos/s no
+            nó, contra ~53 Gpontos/s que a HBM permitiria (12 B/ponto).
+            -> no A64FX a E1 é LIMITADA PELAS DIVISÕES (~24x abaixo).
+            Nota (revisão C2): mesmo a E2 (1 divisão final) fica limitada pela
+            divisão no A64FX (~15.7 vs ~62 Gpontos/s) sem recíproca aproximada.
+     AMD:   SIMD ~3 ciclos/ponto -> ~117 Gpontos/s, acima dos ~14-19 da RAM.
+            -> no AMD as divisões só pesam se o código ficar escalar.
+   Isto justifica com números o teto C1 e a otimização E2 (tabela de pares,
+   que tira 6 das 7 divisões). No A64FX também vale a pena testar a recíproca
+   aproximada (frecpe + Newton, que o -Kfast/-Ofast geram).
+
+
+===============================================================================
+ 2. LATÊNCIA E CACHES   (latency.c, pointer chasing, 1 thread, nó NUMA 0)
+===============================================================================
+
+ AMD 7742
+ +-------+------------+-----------+---------+---------------------------------+
+ | nível | até        | latência  | ciclos  | nota                            |
+ +-------+------------+-----------+---------+---------------------------------+
+ | L1    | 32 KiB     |  1.18 ns  |  4      | @3.38 GHz                       |
+ | L2    | 512 KiB    |  3.57 ns  | 12      |                                 |
+ | L3    | 16 MiB     | 10.08 ns  | 34      | degrau EXATAMENTE em 16 MiB:    |
+ |       |            |           |         | 1 thread só vê a L3 do seu CCX, |
+ |       |            |           |         | não os 256 MiB                  |
+ | RAM   |            | ~105 ns   |         | sobe a 107 ns para >256 MiB     |
+ +-------+------------+-----------+---------+---------------------------------+
+
+ A64FX
+ +-------+--------------+-----------+---------+-------------------------------+
+ | nível | até          | latência  | ciclos  | nota                          |
+ +-------+--------------+-----------+---------+-------------------------------+
+ | L1    | 64 KiB       |  2.51 ns  |  5      | @2.0 GHz -> CONFIRMA L1 64 KiB|
+ | L2    | ~1 MiB       | ~25 ns    | ~50     | sobe devagar até 32 ns aos    |
+ |       |              |           |         | 5 MiB; salta entre 6 e 8 MiB  |
+ |       |              |           |         | -> CONFIRMA L2 8 MiB/CMG      |
+ | HBM   | 12 a 64 MiB  | 144 ns    |         | maior que DDR4: previsto      |
+ | HBM   | >64 MiB      | até 221 ns|         | aos 2 GiB                     |
+ +-------+--------------+-----------+---------+-------------------------------+
+ (o kernel do A64FX não expunha as caches: esta curva é a prova)
+
+ TLB e tamanho de página (CONFIRMADO, job 2254226)
+   * ARM: PAGESIZE=65536 (THP desligado). L1-TLB 16 entradas = 1 MiB e
+     L2-TLB 1024 entradas = 64 MiB: coincidem com os dois "joelhos" da curva
+     (~1 MiB e ~64 MiB) -> são falhas de L1-TLB e de L2-TLB.
+   * x86: PAGESIZE=4096 mas THP=always: os mallocs grandes recebem páginas de
+     2 MiB, e por isso a RAM do AMD quase não mostra efeito de TLB (104->107 ns).
+
+
+===============================================================================
+ 3. BANDA DE MEMÓRIA   (triad.c FP32 e STREAM FP64, GB/s)
+===============================================================================
+
+ 3.1 AMD 7742 x2
+ ---------------
+ +------------------+-----------+-------------+-----------------------------+
+ | nível (KiB/thr)  | 1 thread  | 128 threads | nota                        |
+ +------------------+-----------+-------------+-----------------------------+
+ | L1   16 KiB      |   285     |  23 945     | 84 B/ciclo/core; máx 96     |
+ | L2   256 KiB     |   108     |   8 855     |                             |
+ | L3   2048 KiB    |    94     |   5 036     |                             |
+ | RAM  256 MiB     |    22.0   |     223     |                             |
+ +------------------+-----------+-------------+-----------------------------+
+
+ STREAM Triad AMD:   16t 28.1 | 32t 56.1 | 64t 112.2 | 128t 223.9
+
+ O que significa:
+   * triad nosso (223) = STREAM (224): os dois métodos concordam.
+   * Escala LINEAR com threads porque OMP_PROC_BIND=close enche um nó NUMA
+     de cada vez (16 cores = 1 nó NUMA = 2 canais). Cada nó NUMA dá ~28 GB/s.
+   * 224 / 409.6 = 55% do teórico. MAS o STREAM conta 24 B/elemento e, com
+     write-allocate, o tráfego real é 32 B: 224 x 32/24 = 299 GB/s = 73%.
+   * Prova: o Copy dá 298 GB/s contados (memcpy com stores não-temporais,
+     sem write-allocate) -> ~73% também.
+   -> O write-allocate (teto M3) custa ~25% da banda útil. Bom exemplo
+      medido para o relatório.
+
+ 3.2 A64FX
+ ---------
+ Triad nosso (1º job; L2 corrigida em baixo):
+ +------------------+----------+--------------------+-----------------+
+ | nível (KiB/thr)  | 1 thread | 12 threads (1 CMG) | 48 threads      |
+ +------------------+----------+--------------------+-----------------+
+ | L1   32 KiB      |   127    |  1 512             |  6 006          |
+ | L2   512 KiB     |    66.3  |    451 (IQR 9%!)   |  1 817 (IQR 9%!)|
+ | HBM  128 MiB     |    49.8  |    154.5           |    615          |
+ +------------------+----------+--------------------+-----------------+
+
+ Triad na L2 CORRIGIDO (256 KiB/thread, job 2254226):
+   1t 66.0 | 12t 706 | 48t 2680 GB/s,  IQR < 0.3% (com 512 KiB era 9%).
+
+ STREAM Triad A64FX (1º job):  12t 159 | 24t 318 | 48t 635   (62% de 1 024)
+   * com write-allocate: 635 x 32/24 = 847 GB/s = 83% do teórico.
+   * 1 CMG = 1/4 do nó, exatamente (159 x 4 = 635): HBM por CMG independente.
+
+ STREAM A64FX, todas as versões (correção, job 2254226), Triad GB/s:
+ +-------------+-------+-------+-------+----------------------------------+
+ | versão      |  12t  |  24t  |  48t  | nota                             |
+ +-------------+-------+-------+-------+----------------------------------+
+ | openmp      |  153  |  304  |  606  | com write-allocate               |
+ | zfill       |  206  |  408  |  813  | +34% = 32/24: sem write-allocate |
+ | zfill-acle  |  205  |  407  |  812  |                                  |
+ | vanilla     |  ~45  |       |       | sequencial: não escala, confirma |
+ |             |       |       |       | que é a versão série             |
+ +-------------+-------+-------+-------+----------------------------------+
+   -> TETO M3 MEDIDO no A64FX: 606 (com write-allocate) vs 813 (sem).
+      813 / 1024 = 79% do teórico. Usar 813 como teto de banda HBM.
+
+ 3.3 Problemas encontrados no 1º job (deficiências, para o relatório)
+ -------------------------------------------------------------------
+   (a) Triad L2 no A64FX instável (IQR 9%): 12 threads x 512 KiB = 6 MiB por
+       CMG, que é exatamente onde a curva de latência mostra que a L2 começa a
+       falhar. O tamanho estava demasiado perto do limite -> usar 256 KiB/thread.
+   (b) STREAM zfill no A64FX NÃO correu: no lab2.5 as versões zfill são
+       ficheiros kernel-zfill.c / kernel-zfill-acle.c compilados pelo Makefile,
+       não stream_zfill.c. O script procurou o nome errado e saltou-as em
+       silêncio (erro meu). Sem elas não medíamos o teto M3 no A64FX.
+   Ambos RESOLVIDOS no job de correção 2254226 (ver 3.2).
+
+ 3.4 Teto M2: NUMA errado   (STREAM, todas as threads, jobs 2255630 / 2255631)
+ ------------------------------------------------------------------------------
+ Mesmo STREAM, mesmo job, 2 casos: "normal" (first touch paralelo do STREAM)
+ e "membind0" (numactl --membind=0: TODA a memória no nó NUMA 0, como num
+ Jacobi inicializado por 1 só thread). GB/s:
+ +-----------------------+----------+----------+---------+---------+---------+
+ |                       |  Copy    |  Scale   |  Add    |  Triad  | queda   |
+ +-----------------------+----------+----------+---------+---------+---------+
+ | AMD 128t   normal     |  295.4   |  210.0   |  218.9  |  221.9  |         |
+ | AMD 128t   membind0   |   33.6   |   21.5   |   22.1  |   22.6  |  9.8x   |
+ | A64FX 48t  normal     |  549.6   |  549.3   |  605.3  |  606.8  |         |
+ | A64FX 48t  membind0   |   85.5   |   85.4   |   87.4  |   87.7  |  6.9x   |
+ +-----------------------+----------+----------+---------+---------+---------+
+ (o A64FX usa a versão openmp, com write-allocate, a mesma do teto M3)
+
+ O que significa:
+   * Reprodutível: o caso "normal" repete os jobs anteriores (221.9 vs 223.9
+     no AMD; 606.8 vs 606 no A64FX), diferença < 1%.
+   * AMD: com tudo no nó 0, as 128 threads partilham 2 canais DDR4. Dá 22.6,
+     MENOS que os 28.1 de 16 threads locais nesse mesmo nó (3.1): 112 das 128
+     threads leem através do Infinity Fabric (64 delas do outro socket), o
+     que junta latência e contenção. M2 = 10% da banda normal.
+   * A64FX: tudo na HBM do CMG 0. Dá 87.7, abaixo dos 153 que 12 threads
+     locais tiram desse CMG (3.2): 36 threads vêm de outros CMG pelo anel.
+     M2 = 14% da banda normal.
+   * Ordem da D16 confirmada com números: M1 (stride, calculado: 224/16 = 14
+     no AMD, 606/64 = 9.5 no A64FX) < M2 (22.6 / 87.7) < M3 (224 / 606)
+     < M4 (299 / 813).
+   -> Para a Task 2: inicializar os arrays em paralelo, com o MESMO
+      escalonamento OpenMP do ciclo de cálculo (first touch). Sem isso o
+      Jacobi perde ~10x no AMD e ~7x no A64FX antes de qualquer outra coisa.
+
+
+===============================================================================
+ 4. SGEMM   (validação do pico, D05)
+===============================================================================
+
+ +----------------------------------+------------+------------------------+
+ | configuração                     | GFLOP/s    | % do pico medido       |
+ +----------------------------------+------------+------------------------+
+ | AMD OpenBLAS n=8192, 128 thr     |   2 782    | 25%  (1º job, com bind)|
+ | A64FX SSL2   n=8192,  48 thr     |   3 904    | 65%                    |
+ +----------------------------------+------------+------------------------+
+
+ O AMD a 25% é baixo (o OpenBLAS costuma dar 70-80% no Zen 2). Hipóteses:
+   (1) colocação das páginas NUMA (a inicialização é paralela com OpenMP, mas
+       as threads do OpenBLAS não são as mesmas do OpenMP, logo cada thread
+       pode ler dados de outro nó NUMA);
+   (2) o OMP_PROC_BIND=close pode atrapalhar as threads próprias do OpenBLAS;
+   (3) n=8192 é pequeno para 128 threads (0.39 s por chamada).
+
+ Testes de correção:
+   * Job 2254225 (TIMEOUT): com OMP_PROC_BIND=close o SGEMM deu 15.7 GFLOP/s
+     (10 reps iguais) -> o bind do OpenMP prende as threads do OpenBLAS.
+   * Job 2254309 (sem bind, 128 threads, mediana de 10 reps, IQR):
+     +------------------+---------------+---------------+
+     |                  |    n=8192     |    n=16384    |
+     +------------------+---------------+---------------+
+     | livre            | 2 916 (54)    | 5 558 (280)   |  <- melhor: 49% do pico
+     | livreInterleave  | 3 255 (67)    | 4 862 (389)   |
+     +------------------+---------------+---------------+
+
+ Interpretação:
+   * A causa principal era o BIND: o OpenBLAS do módulo por defeito
+     (OpenBLAS/0.3.32-llvm-compilers-21.1.8, que também puxa o GCCcore 15.2)
+     cria as suas próprias threads; o OMP_PROC_BIND=close do nosso programa
+     (libgomp) amontoa-as -> 15.7 GFLOP/s. No 1º job a mesma configuração deu
+     2 782: com bind o resultado nem sequer é reprodutível.
+   * O tamanho conta: n=16384 tem 8x mais trabalho e só 4x mais dados, logo
+     menos tempo perdido em sincronizar 128 threads -> 1.9x mais rápido.
+   * NUMA (interleave) não é a causa principal: ajuda um pouco em n=8192 e
+     piora em n=16384, com mais variação.
+   * 49% ainda é baixo para um SGEMM no Zen 2 (costuma dar 70-80%). Restam
+     como hipóteses o kernel/compilação desta versão do OpenBLAS (LLVM) e a
+     frequência durante o SGEMM (não medida). A versão do Lab 2.5
+     (OpenBLAS/0.3.27-GCC-13.3.0) não foi testada.
+   -> Para o relatório: o pico do roofline é o do microbenchmark (D05); o
+      SGEMM valida-o em parte (AMD 49%, A64FX 65%) e a história do bind é uma
+      "deficiência encontrada" que vale a pena contar.
+
+
+===============================================================================
+ 5. A100 (GPU)   (gpu_props + gpu_bench, job 2254959)
+===============================================================================
+
+ Propriedades (gpu_props):
+   108 SMs | 1410 MHz | 40 MiB L2 | 164 KiB shared/SM utilizável |
+   2048 threads/SM | 65 536 registos/SM | 39.5 GiB visíveis (ECC ativo)
+
+ Medido (mediana de 10 reps; teste rápido 2254323 e job 2254959, 0 FALHOU):
+ +--------------+------------+-------------+--------+
+ |              | teórico    | medido      | %      |
+ +--------------+------------+-------------+--------+
+ | Pico FP32    | 19.5 TF/s  | 19 188 GF/s | 98.4%  |  IQR < 0.01%
+ | Banda HBM2   | 1 555 GB/s | 1 274 GB/s  | 82%    |  Triad, 3 GiB
+ | Ridge        | 12.5       | 15.1        |        |  FLOP/B
+ +--------------+------------+-------------+--------+
+
+ Latência (pointer chasing, 1 thread, passo 128 B):
+ +------------+-----------+----------------------------------------------+
+ | nível      | latência  | onde                                         |
+ +------------+-----------+----------------------------------------------+
+ | L1         |  27.6 ns  | até ~156 KiB (L1/shared de 192 KiB por SM;   |
+ |            |           | salto aos 185 KiB)                           |
+ | L2 "perto" | ~150 ns   | até ~20 MiB                                  |
+ | L2 "longe" | ~305 ns   | de ~24 a ~40 MiB   (!)                       |
+ | HBM        | ~410 ns   | acima de ~47 MiB                             |
+ +------------+-----------+----------------------------------------------+
+
+ O que significa:
+   * Clock: o nvidia-smi registou 1410 MHz durante o pico: sob carga a GPU
+     sobe acima do "application clock" de 1095 MHz. Prova: no teste rápido
+     (kernels de 0.25 ms) o clock ficou em 1095 MHz e o pico deu
+     14 460 = 19.5 x 1095/1410 (= 15.1) quase exatamente.
+     -> mesma lição do AMD: o pico depende do clock REAL, que é preciso medir.
+   * Banda: na GPU uma escrita que cobre o setor inteiro (32 B) não lê a
+     memória antes, por isso os 12 B/elemento contados são o tráfego real
+     (sem write-allocate). ECC ativo também gasta alguma banda.
+   * L2: os 40 MiB estão divididos em 2 metades de 20 MiB; um SM chega à
+     metade "longe" com o dobro da latência. A curva mostra-o sem ambiguidade.
+   * HBM: 410 ns é muito mais que o A64FX (144 ns, também HBM) e o AMD
+     (105 ns, DDR4): a GPU esconde latência com milhares de threads em voo,
+     não com caches rápidas -> 1 thread mede o pior caso.
+
+
+===============================================================================
+ 6. NÚMEROS PARA O ROOFLINE (1.2)   (FP32, nó inteiro)
+===============================================================================
+
+ +-------------+---------+---------+---------+-----------------------+---------+
+ |             | pico    | pico    | banda   | banda medida          | ridge   |
+ |             | teórico | medido  | teórica |                       | medido  |
+ +-------------+---------+---------+---------+-----------------------+---------+
+ | AMD 7742 x2 |  9 216  | 11 269  |  409.6  | 299 (M4, sem write-   | 37.7    |
+ |             |         |         |         | alloc., calculado;    |         |
+ |             |         |         |         | Copy NT=298)          |         |
+ |             |         |         |         | 224 (STREAM, M3)      |         |
+ | A64FX       |  6 144  |  6 049  |  1 024  | 813 (zfill)           | 7.4     |
+ |             |         |         |         | 606 (openmp, com      |         |
+ |             |         |         |         | write-allocate)       |         |
+ | A100 (ref.) | 19 500  | 19 188  |  1 555  | 1 274 (triad)         | 15.1    |
+ +-------------+---------+---------+---------+-----------------------+---------+
+   pico em GFLOP/s, banda em GB/s, ridge em FLOP/B.
+   Ridge teórico: 22.5 (AMD) e 6.0 (A64FX) FLOP/B.
+   Tetos de memória (GB/s), de baixo para cima (D16):
+     +------+------------------------------+---------+---------+
+     |      |                              |  AMD    |  A64FX  |
+     +------+------------------------------+---------+---------+
+     | M1   | stride (calculado)           |  14     |  9.5    |
+     | M2   | NUMA errado (membind0)       |  22.6   |  87.7   |
+     | M3   | com write-allocate (STREAM)  |  224    |  606    |
+     | M4   | sem write-allocate           |  299    |  813    |
+     +------+------------------------------+---------+---------+
+   Telhado medido = M4 nas duas máquinas (D21, 21/11): ridge = pico / M4.
+   (Antes esta tabela usava M3 no AMD, ridge 50 = 11 269/224, e M4 no A64FX:
+   corrigido para ser coerente com os gráficos.)
+   -> No AMD o ridge medido sobe de 22.5 para 37.7 (1.7x): o clock real sobe
+      o pico (+22%) e a banda medida fica abaixo da teórica (73%). Se se usar
+      o STREAM com write-allocate (M3) o ridge chega a 50 (2.2x).
+
+
+===============================================================================
+ 7. ESTADO DAS MEDIÇÕES DA TASK 1   (21/11/2026)
+===============================================================================
+
+   [FEITO]      1.1  AMD, A64FX e A100: pico, latência/caches, banda, memória
+   [FEITO]      1.2  pico + banda medidos para o roofline AMD + A64FX
+   [FEITO]      1.3  C1 div, C2 1 thread escalar, C3 escalar todos,
+                     C4 sem FMA, C5 pico
+   [FEITO]      1.3  M3/M4 (write-allocate / STREAM)
+   [CALCULADO]  1.3  M1 (stride) - calculado (D16), ok
+   [FEITO]      1.3  M2 (NUMA errado: dados todos num nó) - D20, secção 3.4
+   [FEITO]      teoria: FDIV citado nos manuais (secção 1.3): AMD 3.5 ciclos
+                /vdivps; A64FX 98 ciclos SVE, 29 escalar (Table 16-2/16-3)
+
+
+===============================================================================
+ A. PORQUE É QUE OS JOBS FORAM TÃO RÁPIDOS (4 e 9 min)?
+===============================================================================
+   Os tempos de 1h30 / 2h eram LIMITES de segurança, não estimativas. Cada
+   medição foi desenhada para ser curta: peak ~0.2-0.6 s (div ARM ~6 s), triad
+   calibrado para 0.5 s, STREAM ~20 x 30 ms. 11 reps x 7 modos x 2 contagens
+   de threads + triad + latência = poucos minutos. Os números são estáveis
+   (IQR < 1% em quase tudo), portanto curto NÃO quer dizer pouco fiável.
+   Os ficheiros .out terminam em "FIM", ou seja, todos os passos correram.
+###############################################################################

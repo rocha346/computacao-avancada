@@ -1,0 +1,3 @@
+gcc -c -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=openmp -o stream.o stream.c
+gcc -c -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=openmp -o kernel-openmp.o kernel-openmp.c
+gcc -Ofast -mcpu=native -fopenmp -DSTREAM_ARRAY_DYNAMIC=1 -DSTREAM_ARRAY_SIZE=80000000 -DNTIMES=20 -DSTREAM_KERNEL=openmp -o stream_openmp.exe stream.o kernel-openmp.o

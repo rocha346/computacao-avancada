@@ -1,0 +1,13 @@
+>> pico FP32 (com registo do clock do SM a cada 100 ms)
+>> banda HBM (triad)
+>> latencia (pointer chasing)
+== pico (GFLOP/s por repeticao; a 1a e aquecimento)
+ 15599.7 19188.1 19188.4 19188.2 19187.3 19188.0 19187.7 19220.8 19188.7 19188.3 19188.3
+== triad (GB/s por repeticao)
+ 1258.8 1277.2 1272.5 1272.0 1273.6 1274.1 1274.6 1276.2 1273.6 1271.0 1275.6
+== clock do SM durante o pico (MHz, min/max)
+210 / 1410
+== latencia: primeiras e ultimas linhas
+CSV,4096,27.58
+CSV,1073741696,410.06
+RESUMO: 0 FALHOU   (resultados em res-gpu-2254959/)

@@ -1,0 +1,1 @@
+gcc 15.2.0 (/eb/x86_64/software/GCCcore/15.2.0/bin/gcc); GNU assembler (GNU Binutils) 2.42; CFLAGS=-O3 -march=znver2 -fopenmp

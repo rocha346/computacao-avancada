@@ -1,0 +1,17 @@
+>> sgemm (n = 1024, 2 reps, 128 threads)
+== pages.txt
+PAGESIZE=4096
+THP=[always] madvise never
+AnonHugePages:    260096 kB
+ShmemHugePages:        0 kB
+FileHugePages:         0 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+== GFLOP/s de cada repeticao, por configuracao
+cfg=livre n=1024: 12.3 11.3
+cfg=livreInterleave n=1024: 15.7 16.7
+RESUMO: 0 FALHOU   (resultados em res-corr-x86-2254302/)

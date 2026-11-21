@@ -1,0 +1,632 @@
+===============================================================================
+ REGISTO DE DECISÕES - Work Assignment 2 (ACA, Universidade do Minho)
+ Equipa: Rodrigo (+ colegas de grupo)
+ Criado: 20/11/2026
+===============================================================================
+
+Para que serve este ficheiro
+----------------------------
+Aqui fica escrita CADA decisão que tomamos no trabalho e o PORQUÊ. O professor
+valoriza (notas do Rodrigo):
+  - explicar porquê sempre que tomamos decisões
+  - entender como desenhámos a solução
+  - como paralelizar
+  - que deficiências/dificuldades encontrámos
+  - porque obtivemos aqueles resultados
+  - como caracterizamos as otimizações
+  - pensamento crítico
+
+Formato de cada entrada
+-----------------------
+  [Dxx] Título                                   (data, tarefa)
+  Decisão:      o que escolhemos
+  Porquê:       a justificação (o que vai para o relatório)
+  Alternativas: o que considerámos e rejeitámos, e porquê
+  Impacto:      o que muda no trabalho / o que temos de fazer a seguir
+  Estado:       DECIDIDO / PENDENTE
+
+Prazos
+------
+  Task 1 (relatório 2 páginas, tarefas 1.1 a 1.4) ........ 9 dez 2026, 23:59
+  Task 3 (ensaio IEEE <= 5 páginas, resultados Task 2) ...... 6 jan 2027, 23:59
+  Apresentação oral (10 min) ................................ a anunciar
+
+Resumo da Task 1 (do enunciado)
+-------------------------------
+  1.1 Caracterizar CPU e GPU de cada partição do Deucalion (x86, ARM, A100):
+      fabricante/modelo, latência e tamanho da memória, #cores, pico FP,
+      caches e largura de banda. Explicar COMO obtivemos os números.
+  1.2 Roofline em precisão simples (FP32) do AMD EPYC 7742 (x86) e do A64FX
+      (ARM), os dois no mesmo gráfico, seguindo o Apêndice A do artigo
+      Roofline de 2008 (Williams, Waterman, Patterson). Ver Labs 2 e 2.5.
+  1.3 Adicionar tetos (ceilings) aos rooflines, justificados no contexto do
+      algoritmo Jacobi 3D, e ordená-los.
+  1.4 Metodologia de testes para a Task 2 (protocolo, profilers, lista de
+      testes, métricas, tamanhos L1 / LLC / RAM > 1 GiB).
+
+===============================================================================
+ DECISÕES
+===============================================================================
+
+[D00] Manter um registo de decisões em texto simples      (20/11/2026, geral)
+Decisão:      Todas as decisões ficam neste ficheiro (decisoes.txt), na raiz
+              da pasta do trabalho.
+Porquê:       O professor avalia a justificação das escolhas, não só os
+              resultados. Ter o porquê escrito no momento evita reconstruir
+              o raciocínio à pressa na altura de escrever os relatórios.
+Alternativas: Notas soltas / memória -> perde-se o porquê.
+Impacto:      Cada nova decisão é acrescentada aqui antes de avançar.
+Estado:       DECIDIDO (pelo Rodrigo)
+
+[D01] Variante do Jacobi 3D: box27                     (20/11/2026, Task 1/2)
+Decisão:      Trabalhamos com a variante box27 (Poisson 3D, stencil compacto
+              de 27 pontos, coeficientes constantes por tipo de vizinho).
+Porquê:       - Mais contas por ponto (26 vizinhos) do que o varcoef (6), logo
+                maior intensidade aritmética. Fica perto do ponto de viragem
+                (ridge point) do A64FX e longe do do AMD 7742, o que torna a
+                comparação dos dois rooflines (1.2) mais interessante.
+              - Coeficientes constantes: vetoriza de forma limpa (SIMD AVX2 no
+                AMD, SVE 512 bits no A64FX), sem gathers nem divisões por ponto.
+              - O código de referência usa AoS (struct Cell {u, u_new, f, type}),
+                o que dá uma história de otimização clara (AoS -> SoA,
+                eliminar o campo type e a cópia jacobi_update, reutilização de
+                planos em cache).
+              - Os tetos da 1.3 ficam focados em SIMD/FMA, equilíbrio
+                somas/multiplicações e largura de banda.
+Alternativas: varcoef (7 pontos, 4 materiais): muito limitado por memória,
+              com divisões (média harmónica) e acesso indireto à tabela de
+              materiais. Rejeitado porque a análise ficaria quase só "memory
+              bound" e a vetorização é mais difícil.
+Impacto:      Tetos da 1.3 e tamanhos da 1.4 calculados para o box27
+              (referência usa ~16 B/ponto).
+Estado:       SUBSTITUÍDO por D13 (20/11/2026). Fica no registo de propósito:
+              mostra o raciocínio e porque mudámos.
+
+[D02] Números da 1.1: teórico + medido                  (20/11/2026, Task 1.1)
+Decisão:      Para cada partição (x86, ARM, A100) recolhemos os valores
+              TEÓRICOS (datasheets / manuais do fabricante, calculando o pico
+              FP = #cores x frequência x FLOPs/ciclo) e os valores MEDIDOS no
+              Deucalion, e comparamos os dois.
+              Fontes medidas previstas:
+                - topologia e caches: lscpu, /sys/.../cache, numactl, hwloc
+                - GPU: nvidia-smi -q, deviceQuery
+                - largura de banda: STREAM (CPU, como no Lab 2.5)
+                - latência da memória: pointer chasing (ex.: lat_mem_rd)
+                - pico FP: HPL (como no Lab 2.5)
+Porquê:       - O enunciado pede "Explain how you got these figures": ter as
+                duas fontes mostra o método.
+              - A diferença teórico vs medido (ex.: STREAM vs banda nominal,
+                HPL vs pico) é discussão crítica que o professor valoriza e
+                serve diretamente para os rooflines da 1.2.
+              - Reaproveita o que já fizemos nos Labs 2 e 2.5.
+Alternativas: Só teórico: mais rápido mas sem validação nem método.
+              Só medido: sem referência para dizer quão perto do pico ficamos.
+Impacto:      1º passo: correr os scripts de informação (task1/scripts/
+              info_*.sh). Depois: scripts de benchmarks (STREAM, latência, HPL).
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D03] Divisão de papéis                                  (20/11/2026, geral)
+Decisão:      O Claude (nesta conversa) fica com a parte teórica, o brainstorm
+              e a discussão de estratégias; a execução prática no Deucalion é
+              guiada no chat do projeto. O Rodrigo decide sempre.
+Porquê:       Separar o "porquê" (teoria, estratégia) do "como" (comandos)
+              mantém cada parte clara e o registo de decisões consistente.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D04] Roofline da 1.2 ao nível do NÓ inteiro             (20/11/2026, Task 1.2)
+Decisão:      Comparamos o nó x86 completo (2x AMD EPYC 7742, 128 cores) com
+              o nó ARM (1x A64FX, 48 cores). A linha de 1 socket do AMD entra
+              como teto (ceiling) NUMA/afinidade na 1.3.
+Porquê:       - É a unidade que o Slurm nos atribui com --exclusive e a que a
+                Task 2 vai usar com OpenMP: os pontos medidos na Task 2 ficam
+                diretamente comparáveis com este roofline.
+              - Comparar custo/energia por nó é a comparação prática relevante.
+              - A diferença 1 socket vs 2 sockets passa a ser um teto
+                justificado (dados mal colocados em NUMA = só 1 socket de banda).
+Alternativas: Chip a chip (1x7742 vs A64FX): arquitetura mais "limpa", mas não
+              corresponde ao que corremos na Task 2. Rejeitado.
+Impacto:      Pico SP x86 = 9 216 GFLOP/s (base 2.25 GHz), banda teórica
+              409.6 GB/s; benchmarks x86 correm com os 128 cores e os 2 sockets.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D05] Pico FP em SP: microbenchmark próprio + SGEMM      (20/11/2026, Task 1.2/1.3)
+Decisão:      Medimos o pico em precisão simples com um microbenchmark próprio
+              (ciclo de FMAs SIMD independentes, todos os cores) e validamos com
+              SGEMM de uma biblioteca otimizada (OpenBLAS/BLIS no AMD, SSL2 no
+              A64FX). O mesmo microbenchmark, com flags diferentes, mede os
+              tetos: escalar (sem SIMD), SIMD sem FMA (só somas), 1 core.
+Porquê:       - O HPL do Lab 2.5 mede DOUBLE; o roofline pedido é SINGLE.
+                Multiplicar por 2 seria uma suposição, não uma medição.
+              - Um único código para pico e tetos dá tetos MEDIDOS e
+                comparáveis entre as duas máquinas (1.3 bem justificada).
+              - O SGEMM mostra o que código "real" otimizado consegue atingir,
+                e a distância ao microbenchmark é discussão crítica.
+Alternativas: Só SGEMM: menos trabalho, tetos ficariam só calculados.
+              HPL em DP x2: reaproveita o lab, mas não é medição de SP.
+Impacto:      Tenho de desenhar o microbenchmark (cadeias de FMA independentes
+              suficientes para esconder a latência da FMA: nº acumuladores >=
+              latência x nº de pipelines).
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D06] Largura de banda por nível: STREAM nas duas máquinas (20/11/2026, Task 1.1/1.2)
+Decisão:      Usamos o STREAM (o mesmo do Lab 2.5) no AMD e no A64FX, com o
+              tamanho dos arrays escolhido para caber em cada nível (L1, LLC,
+              RAM). No A64FX usamos a versão zfill (evita o write-allocate).
+              A métrica de referência é o kernel Triad.
+Porquê:       - Mesmo método nas duas máquinas = comparação justa no mesmo
+                gráfico (1.2).
+              - O Triad (a = b + s*c) lê 2 arrays e escreve 1, o mesmo rácio
+                do box27 otimizado (lê u e f, escreve u_new).
+              - Já conhecemos a ferramenta do Lab 2.5.
+Alternativas: likwid-bench (pode não existir no Deucalion, suporte ARM
+              limitado); Intel Advisor (só x86, medições não comparáveis).
+Impacto:      Correr STREAM com OpenMP em todos os cores (D04: nó inteiro),
+              com OMP_PROC_BIND/OMP_PLACES fixos. Atenção crítica: o STREAM
+              conta bytes sem o write-allocate, por isso o valor "real" de
+              tráfego pode ser maior do que o reportado.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D07] Latência da memória: pointer chasing próprio em C   (20/11/2026, Task 1.1)
+Decisão:      Escrevemos um pequeno programa em C que percorre uma lista
+              ligada com ordem aleatória (cada leitura depende da anterior),
+              para tamanhos crescentes (de KiB até GiB), e mede ns por acesso.
+Porquê:       - Cada load depende do anterior, por isso o processador não
+                consegue sobrepor acessos nem o prefetcher adivinhar o próximo:
+                o tempo medido é a latência pura.
+              - Os "degraus" da curva latência vs tamanho mostram onde acaba
+                cada nível (L1, L2, L3/LLC, RAM): confirma os tamanhos das
+                caches da 1.1 por medição.
+              - Portável (mesmo código em x86 e ARM) e fácil de explicar.
+Alternativas: lat_mem_rd (pode não estar instalado no ARM); só datasheet
+              (fraco para "explain how you got these figures").
+Impacto:      Atenção ao A64FX: linhas de cache de 256 B (vs 64 B no AMD) e
+              páginas grandes; usar stride >= tamanho da linha e considerar
+              efeitos de TLB nos tamanhos grandes (discutir no relatório).
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D08] Tetos (ceilings) da 1.3 para o box27              (20/11/2026, Task 1.3)
+Decisão:      4 tetos de computação + 4 de memória, ordenados como no artigo
+              (Williams et al. 2008): do mais provável de o compilador/código
+              simples atingir (mais baixo) ao que exige mais esforço.
+              Computação (de baixo para cima):
+                C1. 1 thread, escalar (sem SIMD)   <- código de referência
+                C2. todos os cores, escalar        <- paralelizar (OpenMP)
+                C3. todos os cores, SIMD, sem FMA  <- vetorizar; teto realista
+                C4. pico: SIMD + FMA               <- inatingível no box27
+              Memória (de baixo para cima):
+                M1. NUMA errado (first-touch num só socket/CMG)
+                M2. sem cache blocking (u lido ~3x da RAM)
+                M3. com write-allocate (stores normais)
+                M4. STREAM medido (banda real)
+Porquê:       - Cada teto corresponde a uma otimização concreta da Task 2, o
+                que liga o roofline ao trabalho de otimização.
+              - C3 é o teto realista porque o box27 tem ~26 somas e só ~4
+                multiplicações por ponto: quase nada para fundir numa FMA.
+              - Perder SIMD custa 8x no AMD (AVX2, 8 floats) e 16x no A64FX
+                (SVE 512, 16 floats): o A64FX é mais sensível à vetorização.
+              - M1: D04 (nó inteiro) torna a colocação NUMA crítica (2 sockets
+                no AMD, 4 CMG no A64FX).
+              - M2: 3 planos de u (~3 MiB para n=512) não cabem na L2 do AMD.
+Alternativas: Só os tetos clássicos do artigo: menos específicos do box27.
+Impacto:      Tetos C1-C4 medidos com o microbenchmark (D05); M1/M4 medidos
+              com STREAM (D06); M2/M3 calculados a partir do tráfego.
+Estado:       SUBSTITUÍDO por D16 (tetos refeitos para o varcoef).
+
+[D09] Tamanhos da 1.4: por máquina em L1/LLC, igual na RAM (20/11/2026, Task 1.4)
+Decisão:      Tamanhos (grelha n³ interior, referência box27 = 16 B/ponto com
+              halo, (n+2)³ pontos):
+                L1   AMD 7742 (L1d 32 KiB)  -> n = 10  (12³ x 16 B = 27 KiB)
+                     A64FX    (L1d 64 KiB)  -> n = 13  (15³ x 16 B = 53 KiB)
+                LLC  AMD (L3 16 MiB por CCX)  -> PROPOSTA n = 78 (~7.8 MiB)
+                     A64FX (L2 8 MiB por CMG) -> PROPOSTA n = 62 (4.0 MiB)
+                     (~metade da LLC vista por 1 thread: acima da L1/L2
+                     privadas, com margem para conflitos e outros dados)
+                RAM  igual nas duas -> PROPOSTA n = 512 (~2 GiB > 1 GiB;
+                     cabe nos 8 GiB de HBM de 1 CMG do A64FX)
+Porquê:       - O objetivo de cada tamanho é ISOLAR um nível da memória; as
+                caches das duas máquinas têm tamanhos diferentes, logo o mesmo
+                tamanho não isolaria o mesmo nível nas duas.
+              - Na RAM o nível é "fora do chip" nas duas, por isso usar o mesmo
+                tamanho permite comparar diretamente DDR4 vs HBM2.
+              - Margem abaixo do tamanho da cache: há outros dados (pilha,
+                código, halo), e associatividade limitada causa conflitos.
+Alternativas: O mesmo tamanho em tudo: o tamanho "L1" de uma máquina não cabe
+              na L1 da outra. Rejeitado.
+Impacto:      Gerar com tools/gen_input.py box27 --dims n n n. Confirmar os
+              tamanhos LLC com a curva de latência (D07). Se mudarmos as
+              estruturas de dados (ex.: SoA, 12 B/ponto), recalcular.
+              Discutir: n = 512 é potência de 2 -> possíveis conflitos de
+              cache (aliasing); alternativa n = 500.
+Estado:       SUBSTITUÍDO por D15 (valores para o varcoef). O princípio "por
+              máquina em L1/LLC, igual na RAM" mantém-se.
+
+[D10] Estatística: 10 repetições, mediana + IQR          (20/11/2026, Task 1.4)
+Decisão:      Cada teste corre 1 vez de aquecimento (descartada) + 10
+              repetições medidas. Reportamos a MEDIANA e o intervalo
+              interquartil (IQR = Q3 - Q1); nos gráficos, barras de erro Q1-Q3.
+Porquê:       - Os tempos de execução não seguem uma normal: têm cauda de
+                outliers (ruído do SO, interrupções, variação de frequência,
+                vizinhos na rede). A mediana não é puxada por esses outliers;
+                a média é.
+              - O IQR mostra a variabilidade (estabilidade da medição), o que
+                alimenta o pensamento crítico ("o resultado é fiável?").
+              - O aquecimento elimina efeitos de arranque (page faults na 1ª
+                escrita, caches frias, frequência a subir).
+              - 10 repetições: compromisso entre custo de horas no Deucalion
+                e quartis estáveis.
+Alternativas: 5 reps + média/desvio padrão (sensível a outliers);
+              k-best (esconde a variabilidade).
+Impacto:      Scripts de teste fazem 11 execuções por configuração e guardam
+              todas as linhas CSV; o tratamento estatístico é feito depois.
+              Se o IQR for grande (> ~5% da mediana), investigar a causa.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D11] Profilers: perf/PAPI comum + ferramenta do fabricante (20/11/2026, Task 1.4)
+Decisão:      - Base comum nos 2 CPUs: perf (contadores de hardware: ciclos,
+                instruções, misses L1/LLC, instruções FP/SIMD) e PAPI
+                (contagem dentro do código, só na região do solve).
+              - x86 (AMD 7742): Intel Advisor (roofline, vetorização) e
+                AMD uProf se existir no Deucalion.
+              - ARM (A64FX): Fujitsu fapp/fipp (contadores do A64FX, energia).
+              - GPU (A100): Nsight Systems (nsys: linha temporal, transferências
+                host<->device) e Nsight Compute (ncu: ocupação, banda, roofline).
+              - Energia: RAPL via perf (AMD), fapp / sacct ConsumedEnergy
+                (A64FX), NVML / nvidia-smi (A100).
+Porquê:       - perf/PAPI existem nas duas arquiteturas: métricas com o mesmo
+                significado = comparação justa entre máquinas.
+              - As ferramentas do fabricante conhecem os contadores específicos
+                (ex.: utilização SVE no A64FX) e dão análises que perf não dá.
+              - A GPU não tem alternativa real às ferramentas da NVIDIA.
+Alternativas: Só perf/PAPI (perde análises de vetorização/roofline);
+              só ferramentas do fabricante (métricas não comparáveis).
+Impacto:      Confirmar no Deucalion que módulos existem (ml spider perf,
+              PAPI, advisor, uprof, fapp). Crítica a referir: Advisor foi feito
+              para Intel; em AMD alguns contadores podem não estar disponíveis.
+              Profilers têm overhead: as medições de TEMPO são feitas SEM
+              profiler; os contadores numa execução separada.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D12] Lista de testes da 1.4: T1 a T10                   (20/11/2026, Task 1.4)
+Decisão:      Aprovado o plano em task1/protocolo_testes_1.4.txt: T1 linha de
+              base, T2 escalabilidade forte, T3 fraca, T4 NUMA/afinidade,
+              T5 vetorização, T6 hierarquia de memória/tráfego, T7 overhead de
+              paralelização, T8 energia, T9 GPU, T10 pontos no roofline.
+Porquê:       - Cada teste tem objetivo, métricas e hipótese escrita ANTES de
+                medir: permite comparar o esperado com o obtido (pensamento
+                crítico) e liga cada teste a um teto da 1.3 (D08).
+              - O enunciado permite desvios na Task 2 se justificados: é mais
+                fácil defender cortar um teste planeado do que acrescentar.
+Alternativas: Só os essenciais (T1, T2, T5, T6, T8, T10): mais curto, menos
+              completo. Rejeitado por agora; reavaliar se faltarem horas.
+Impacto:      O relatório de 2 páginas resume os testes numa tabela.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D13] MUDANÇA: variante varcoef em vez de box27           (20/11/2026, Task 1/2)
+Contexto:     O professor comentou que o box27 é mais fácil do que o varcoef e
+              que, por isso, a avaliação de quem escolher box27 será mais
+              exigente.
+Decisão:      Mudamos para o varcoef (condução de calor em material com 4
+              materiais, stencil de 7 pontos com médias harmónicas). Substitui
+              D01. D08 (tetos) e D09 (tamanhos) passam a "em revisão"; as
+              restantes decisões (D02-D07, D10-D12) mantêm-se porque não
+              dependem da variante.
+Porquê:       - Ainda não tínhamos medido nada: o custo da mudança é baixo.
+              - O varcoef tem mais para analisar, e isso é o que o enunciado
+                diz valer mais ("analysing the algorithm's behaviour on
+                different hardware is more important"):
+                * ordem dos ciclos errada na referência (i no ciclo interior,
+                  acesso com stride de um plano inteiro);
+                * 7 divisões por ponto (6 médias harmónicas + a final): as
+                  divisões são lentas, e o custo difere muito entre AMD e A64FX;
+                * acesso indireto materials[material[p]] (gather, difícil de
+                  vetorizar);
+                * trade-off recalcular vs guardar coeficientes: mais contas vs
+                  mais bytes, cuja escolha certa pode mudar de máquina para
+                  máquina.
+Alternativas: Manter box27 e acrescentar extras (blocking temporal, roofline
+              por nível de cache, etc.): possível, mas partíamos de uma
+              variante que o professor já considera fácil.
+Lição:        Decidimos o D01 só com critérios técnicos; faltava o critério de
+              avaliação. Quando o contexto mudou, revimos a decisão em vez de
+              a manter por inércia.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D14] Frequência do pico AMD: base 2.25 GHz + medida sob carga (20/11/2026, Task 1.1/1.2)
+Contexto:     info-dev-x86 mostrou governor 'performance' e turbo ativo
+              (scaling_cur_freq até 3.4 GHz), acima da base de 2.25 GHz.
+Decisão:      O pico TEÓRICO usa a frequência base oficial (2.25 GHz ->
+              9 216 GFLOP/s SP no nó). O microbenchmark (D05) mede também a
+              frequência REAL sob carga AVX2 em todos os cores (ciclos/tempo
+              com perf) e o roofline mostra as duas linhas.
+Porquê:       - Com turbo, a frequência real fica entre a base e o boost e
+                depende do nº de cores ativos e do tipo de instruções (AVX2
+                consome mais energia -> frequência mais baixa).
+              - Usar só a base pode pôr medições ACIMA do "pico" (absurdo);
+                usar só o boost (13.9 TFLOP/s) é irrealista com 128 cores.
+              - Medir e mostrar as duas é pensamento crítico: o "pico" não é
+                um número fixo num processador com turbo.
+Alternativas: Só base; só boost máximo. Rejeitadas pelas razões acima.
+Impacto:      Fazer o mesmo no A64FX (frequência não visível no Linux) e na
+              A100 (clock por defeito 1095 MHz vs máximo 1410 MHz).
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D15] Tamanhos da 1.4 para o varcoef                     (20/11/2026, Task 1.4)
+Decisão:      Referência varcoef = 12 B/ponto (u 4 + u_new 4 + material int 4),
+              (n+2)³ pontos com halo:
+                L1   AMD 7742 (L1d 32 KiB)        n = 11  (13³ x 12 B = 25.7 KiB)
+                     A64FX    (L1d 64 KiB)        n = 14  (16³ x 12 B = 48 KiB)
+                LLC  AMD (L3 16 MiB por CCX)      n = 86  (7.8 MiB)
+                     A64FX (L2 8 MiB por CMG)     n = 68  (3.9 MiB)
+                RAM  igual nas duas               n = 500 (1.41 GiB > 1 GiB)
+Porquê:       - Mantém o princípio de D09: isolar cada nível em cada máquina.
+              - L1 A64FX: n = 15 daria 57.6 KiB em 64 KiB com associatividade
+                4-way, apertado demais; n = 14 deixa margem.
+              - LLC: ~metade da LLC que 1 thread vê (L3 da sua CCX no AMD, L2
+                do seu CMG no A64FX), acima das caches privadas.
+              - RAM: n = 500 cumpre > 1 GiB e evita potências de 2 (n = 512),
+                que podem causar conflitos de cache (aliasing) e confundir a
+                análise. Cabe nos ~8 GiB de 1 CMG do A64FX.
+Alternativas: n = 512 na RAM (1.52 GiB): rejeitado pelo risco de aliasing.
+Impacto:      Gerar com tools/gen_input.py varcoef --dims n n n. Confirmar os
+              limites de L1/LLC com a curva de latência (D07). Se mudarmos as
+              estruturas (ex.: material em uint8 -> 9 B/ponto), recalcular o
+              tamanho ocupado pela NOSSA versão.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026); n RAM e LLC do nó revistos
+              pela D22 (21/11/2026).
+
+[D16] Tetos da 1.3 para o varcoef                        (20/11/2026, Task 1.3)
+Decisão:      Os mesmos tetos, pela MESMA ordem, nos dois rooflines (AMD e
+              A64FX); as diferenças entre máquinas são explicadas no texto.
+              Cálculo (de baixo para cima):
+                C1. divisões (7 por ponto, não pipelined)   <- referência
+                C2. 1 thread, escalar, sem divisões harmónicas (tabela 4x4)
+                C3. todos os cores, escalar                 <- OpenMP
+                C4. todos os cores, SIMD sem FMA            <- vetorização
+                C5. pico SIMD + FMA (parcialmente atingível: num += k*u)
+              Memória (de baixo para cima):
+                M1. acesso com stride (ordem de ciclos da referência):
+                    1/16 da banda no AMD (linha 64 B), 1/64 no A64FX (256 B)
+                M2. NUMA errado (first-touch numa só thread)
+                M3. com write-allocate (~+30% tráfego em u_new)
+                M4. STREAM medido (D06)
+Porquê:       - Ordenação como no artigo (Williams et al. 2008): de baixo para
+                cima, do teto atingido com menos esforço ao que exige a
+                otimização mais difícil. Cada teto = uma otimização da Task 2.
+              - Mesma ordem nas duas: os dois rooflines estão no mesmo gráfico
+                (D04) e uma ordem comum torna-o legível.
+              - C1 é um teto de "mistura de instruções", como o "FP balance"
+                do artigo; o enunciado pede tetos "no contexto do algoritmo".
+                Explica porque a referência é lenta apesar da AI alta.
+              - Discussão no texto: perder SIMD custa 8x no AMD e 16x no
+                A64FX; a divisão deve ser bem mais cara no A64FX; M1 é muito
+                pior no A64FX por causa das linhas de 256 B.
+Alternativas: Ordem própria por máquina (mais rigoroso, gráfico ilegível);
+              sem C1 (perdia a explicação da lentidão da referência).
+Impacto:      Confirmar latência/throughput de FDIV no Software Optimization
+              Guide do Zen 2 e no A64FX Microarchitecture Manual; C2-C5
+              medidos com o microbenchmark (D05), M2/M4 com STREAM (D06),
+              M1/M3 calculados.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D17] Banda: STREAM só na RAM + triad nosso nas caches     (20/11/2026, Task 1.1/1.2)
+Contexto:     Ao preparar os benchmarks: o STREAM cronometra CADA passagem
+              pelos arrays com um relógio de ~1 us. Arrays que cabem na L1 são
+              percorridos em microssegundos -> medição sem resolução.
+Decisão:      Complementa D06. STREAM oficial do Lab 2.5 (e versões zfill no
+              A64FX) para a RAM; programa nosso (task1/bench/triad.c) com o
+              MESMO kernel Triad a[i] = b[i] + s*c[i] para L1, L2 e LLC: cada
+              thread tem os seus arrays (first touch) e repete o Triad milhares
+              de vezes dentro de UMA medição de tempo.
+Porquê:       - Mesmo padrão de acesso (lê 2, escreve 1) e mesma contagem de
+                bytes (12 B/elemento) que o STREAM: os valores são comparáveis.
+              - Medir milhares de repetições de uma vez elimina o problema de
+                resolução do relógio.
+              - Corremos também o triad num tamanho de RAM para o comparar
+                diretamente com o STREAM (validação cruzada).
+Alternativas: Só STREAM com NTIMES maior: não resolve a resolução de cada
+              medição individual.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D18] Correções após o 1º job longo (jobs 2254226 ARM, 2254309 x86) (20/11/2026, Task 1.1-1.3)
+Contexto:     A análise do 1º job (task1/analise_resultados_t1.txt) encontrou 3
+              problemas: STREAM zfill do A64FX não correu (erro do script),
+              triad da L2 do A64FX instável (IQR 9%) e SGEMM do AMD a 25% do pico.
+Decisão:      Job curto de correção (escolha do Rodrigo), com estes resultados:
+              (a) Banda HBM do A64FX: M4 = STREAM zfill = 813 GB/s (79% do
+                  teórico); M3 = STREAM openmp = 606 GB/s (com write-allocate).
+                  No AMD não há zfill: M3 = STREAM medido = 224 GB/s; M4 =
+                  224 x 32/24 = 299 GB/s (confirmado pelo Copy com stores
+                  não-temporais: 298 GB/s).
+              (b) Triad na L2 do A64FX com 256 KiB/thread (não 512): 706 GB/s
+                  por CMG, 2 680 GB/s no nó, IQR < 0.3%.
+              (c) SGEMM do AMD SEM OMP_PROC_BIND, n=16384: 5 558 GFLOP/s
+                  (mediana) = 49% do pico medido.
+Porquê:       (a) zfill vs openmp = +34% = 32/24 B: mede exatamente o custo
+                  do write-allocate (teto M3 da D16).
+              (b) 12 x 512 KiB = 6 MiB por CMG fica no limite da L2 (8 MiB):
+                  a curva de latência mostra a L2 a falhar a partir de ~6 MiB.
+              (c) Com bind o SGEMM caiu para 15.7 GFLOP/s (job 2254225) e no
+                  1º job deu 2 782: resultado instável. O OpenBLAS do módulo
+                  (0.3.32, compilado com LLVM) tem as suas próprias threads, e
+                  o bind do OpenMP do nosso programa amontoa-as. Sem bind:
+                  n=8192 2 916, n=16384 5 558 (mais trabalho por thread).
+                  --interleave=all ajuda em n=8192 (3 255) mas piora em
+                  n=16384 (4 862, mais variável): NUMA não é a causa principal.
+Alternativas: Usar só os valores do 1º job (sem teto M3 no A64FX, SGEMM
+              inexplicado).
+Impacto:      Roofline (1.2): pico AMD 11 269 / banda 224-299; A64FX 6 049 /
+              606-813. O SGEMM fica como validação parcial do pico
+              (AMD 49%, A64FX 65%) e como "deficiência encontrada" no texto.
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D19] A100: medir também (pico, banda, latência)            (20/11/2026, Task 1.1)
+Contexto:     Depois do job de correção, a GPU só tinha valores calculados
+              (gpu_props). A D02 promete teórico + medido nas 3 partições.
+Decisão:      Programa CUDA próprio (task1/bench/gpu_bench.cu), com as mesmas
+              ideias dos CPUs: FMAs independentes em registos (pico), Triad em
+              3 GiB (banda HBM) e pointer chasing com 1 thread (latência).
+              Resultados (job 2254959): pico 19 188 GFLOP/s (98.4%, clock
+              medido 1410 MHz), banda 1 274 GB/s (82%), latência L1 27.6 ns,
+              L2 150 ns (metade perto) / 305 ns (metade longe), HBM 410 ns.
+Porquê:       - Consistência com a D02 e com os outros dois nós.
+              - O teste rápido mostrou que o clock "das aplicações" (1095 MHz)
+                não é o clock sob carga (1410): sem medir teríamos dúvidas.
+              - A curva de latência revela a L2 dividida em 2 metades de
+                20 MiB, coisa que nenhum valor teórico mostra.
+Alternativas: Só teórico na GPU (mais rápido, 1.1 incompleta).
+Estado:       DECIDIDO (Rodrigo, 20/11/2026)
+
+[D20] Teto M2 (NUMA errado) medido com STREAM + numactl --membind=0 (21/11/2026, Task 1.3)
+Contexto:     A D16 previa medir o M2, que ainda faltava (era a P01).
+Decisão:      Medir (escolha do Rodrigo). STREAM com todas as threads, em dois
+              casos no mesmo job: normal e com TODA a memória no nó NUMA 0
+              (numactl --membind=0). Jobs 2255630 (x86) e 2255631 (ARM).
+              Triad: AMD 221.9 -> 22.6 GB/s (9.8x menos);
+                     A64FX 606.8 -> 87.7 GB/s (6.9x menos).
+Porquê:       - Imita um Jacobi com os arrays inicializados por 1 thread.
+              - Mede também o custo do tráfego entre nós NUMA: o M2 fica
+                ABAIXO da banda de 1 nó com threads locais (AMD 28.1, A64FX
+                153), coisa que a estimativa não mostraria.
+              - Confirma a ordem da D16: M1 < M2 < M3 < M4 nas duas máquinas.
+Alternativas: Estimar com a banda de 1 nó NUMA já medida (sobrestimava o M2).
+Impacto:      Task 2: inicialização paralela com o mesmo escalonamento do
+              ciclo de cálculo (first touch) é a primeira otimização.
+Estado:       DECIDIDO (Rodrigo, 21/11/2026)
+
+[D21] Gráficos roofline da 1.2 e da 1.3                   (21/11/2026, Task 1.2/1.3)
+Contexto:     Com todas as medições feitas, faltava desenhar os rooflines. Os
+              valores vêm só de task1/analise_resultados_t1.txt,
+              valores_teoricos.txt e D14-D20; nada foi medido nem alterado.
+Decisão:      Script task1/roofline/roofline.py (matplotlib, log-log base 2,
+              Apêndice A de Williams et al. 2008). Gera em inglês (relatório)
+              e português (estudo), em PNG e PDF:
+                Fig. 1 (1.2): AMD e A64FX no MESMO gráfico; linha cheia =
+                  medido, tracejado = teórico (D14), com os pontos de viragem.
+                Fig. 2 (1.3): 2 painéis lado a lado, mesmos eixos, cada
+                  máquina com os seus tetos C1-C5 e M1-M4 (D16).
+              (a) C1 = divisão ESCALAR com 1 thread (sdiv 1 core):
+                  AMD 0.96, A64FX 0.07 GFLOP/s.
+                  [REVISTO pela D23: x 45/7 -> 6.2 / 0.44]
+              (b) Só os tetos da D16: sem tetos de banda das caches e sem A100.
+              (c) Telhado de memória medido = M4 (sem write-allocate):
+                  AMD 299, A64FX 813 GB/s. Ridge medido: AMD 37.7, A64FX 7.4
+                  FLOP/B (teórico 22.5 e 6.0).
+Porquê:       - Fig. 1 cumpre à letra o enunciado ("both systems in the same
+                graph"); os 18 tetos num só gráfico ficavam ilegíveis, por
+                isso a 1.3 vai em painéis com os mesmos eixos.
+              (a) A D16 diz que C1 é a referência (1 thread, escalar, com
+                  divisões) e C2 é o mesmo sem divisões. Só a divisão escalar
+                  de 1 thread fica abaixo do C2 e mantém C1<C2<C3<C4<C5. A
+                  divisão SIMD em todos os cores (988 / 15.4) ficaria acima
+                  do C2 e a ordem deixava de fazer sentido.
+              (b) O enunciado só pede AMD e A64FX com os tetos do artigo; o
+                  relatório tem 2 páginas. Cache e A100 ficam nas tabelas.
+              (c) Na D16 o M4 é o teto de memória mais alto, logo é o próprio
+                  telhado; com M3 o M4 ficaria ACIMA do telhado. Também torna
+                  as duas máquinas coerentes: a tabela da secção 6 da análise
+                  usava M3 no AMD (ridge 50 = 11 269/224) e M4 no A64FX (7.4).
+Alternativas: Tudo num só gráfico; 3 gráficos separados; C1 = divisão SIMD
+              ou escalar em todos os cores; acrescentar caches/A100; telhado
+              M3 (224 / 606 GB/s, ridge AMD 50). Rejeitadas pelas razões acima.
+Impacto:      Pontos da Task 2.4 entram nestes mesmos gráficos. Secção 0 e 6
+              da análise corrigidas (escolha do Rodrigo, 21/11): banda medida
+              AMD = M4 299 GB/s, ridge medido 37.7 (o STREAM 224 fica como M3).
+Estado:       DECIDIDO (Rodrigo, 21/11/2026)
+
+[D22] Protocolo 1.4 revisto após a revisão da Task 1       (21/11/2026, Task 1.4)
+Contexto:     A revisão (task1/revisao_task1.txt, C4-C7 e B8) encontrou 4
+              problemas no protocolo que afetariam a Task 2.
+Decisão:      Aplicar todos (escolha do Rodrigo):
+              (a) 2º tamanho LLC para corridas com todas as threads ("LLC-nó"):
+                  AMD n = 250 (183 MiB), A64FX n = 110 (16 MiB). O LLC da D15
+                  (n = 86 / 68) passa a "LLC-1t", só para 1 thread.
+              (b) RAM: n = 520 nas duas (1.59 GiB a 12 B/ponto, 1.19 GiB a
+                  9 B/ponto) em vez de n = 500.
+              (c) Módulos fixos: carregar explicitamente a versão do
+                  compilador e registar gcc -dumpfullversion e ml -t list.
+              (d) Ciclos (perf stat -e cycles,task-clock) em todas as medições
+                  de escalabilidade.
+              (e) protocolo_testes_1.4.txt: referências D08/D09 e numeração de
+                  tetos do box27 corrigidas.
+Porquê:       (a) Com 128 threads, n = 86 dá 61 KiB por thread: cabe na L2
+                  privada (512 KiB), por isso o teste "LLC" mediria a L2. n = 250
+                  dá 1.4 MiB/thread (> L2) e 5.7 MiB por CCX (< 16 MiB de L3);
+                  no A64FX n = 110 dá 343 KiB/thread (> L1) e 4 MiB por CMG
+                  (metade da L2, a regra da D15).
+              (b) Com o material em uint8 (9 B/ponto), n = 500 dá 1.06 GiB: à
+                  justa; qualquer compactação extra ficava abaixo de 1 GiB e
+                  violava o enunciado. n = 520 dá margem e não é potência de 2.
+              (c) Na Task 1 os scripts pediam GCC/13.3.0 e correu o 15.2.0
+                  (numactl e OpenBLAS trocam o GCCcore): reprodutibilidade.
+              (d) O clock do AMD desce de 3.38 GHz (1 core) para 2.81 GHz
+                  (>= 64 cores): sem ciclos, essa perda (~17%) parecia
+                  overhead de paralelização.
+Alternativas: Só corrigir as referências (B8); rever um a um. Rejeitadas.
+Impacto:      Gerar também varcoef --dims 250/110/520. O relatório (secção
+              1.4, "Sizes" e Tabela III) tem de ser atualizado na thread do
+              relatório. A D15 mantém-se para L1 e LLC-1t.
+Estado:       DECIDIDO (Rodrigo, 21/11/2026)
+
+[D23] Teto C1 = divisões x 45/7; um só gráfico no relatório (21/11/2026, Task 1.3)
+Contexto:     A revisão (B6) encontrou dois valores de C1: 0.96/0.07 nas figuras
+              da D21 (roofline/roofline.py) e 6.2/0.44 no relatório, e o
+              relatório com um só gráfico quando a D21 previa 2 painéis.
+Decisão:      (escolha do Rodrigo) C1 = débito da divisão escalar de 1 thread
+              x 45/7 em todo o lado: AMD 0.9635 x 45/7 = 6.2, A64FX 0.06858 x
+              45/7 = 0.44 GFLOP/s. O relatório mantém UM gráfico (1.2 e 1.3
+              juntos), com os rótulos limpos. roofline/roofline.py atualizado
+              e figuras regeneradas (os painéis ficam para estudo).
+Porquê:       - Um teto de "mistura de instruções" (como o "FP balance" do
+                artigo) mede FLOPs TOTAIS por segundo quando a unidade de
+                divisão está saturada: cada ponto faz 45 FLOPs, 7 divisões; as
+                outras 38 correm noutros pipes em paralelo. 0.96/0.07 só
+                contava as divisões e subestimava o teto 6.4x.
+              - Continua C1 < C2 nas duas máquinas. É um limite superior: a
+                referência divide em double (mais lento).
+              - Um só gráfico cumpre a 1.2 ("same graph") e a 1.3 e poupa
+                espaço nas 2 páginas.
+Alternativas: Painéis da D21 no relatório (mais espaço); C1 = 0.96/0.07.
+Estado:       DECIDIDO (Rodrigo, 21/11/2026). Substitui a D21(a) e a parte da
+              D21 sobre os painéis no relatório.
+
+[D24] Convenção dos bytes: M1 e M3 como tetos + 1 frase      (21/11/2026, Task 1.3/2.4)
+Contexto:     No artigo, o tráfego extra (write-allocate, capacidade,
+              conflitos) aparece como "paredes" de intensidade (o ponto anda
+              para a esquerda); nós desenhamos write-allocate (M3) e stride
+              (M1) como bandas mais baixas (revisão, C9).
+Decisão:      (escolha do Rodrigo) Manter M1 e M3 como tetos e acrescentar 1
+              frase: a OI conta os bytes ÚTEIS (sem write-allocate, um elemento
+              por acesso); M1 e M3 são bandas efetivas para essa contagem. Na
+              Task 2.4 usar SEMPRE esta convenção.
+Porquê:       Os valores já estão medidos e certos; só faltava fixar a
+              convenção, para não contar o write-allocate duas vezes (OI com
+              bytes reais E comparação com o M3).
+Alternativas: Redesenhar como paredes (mais trabalho, ganho discutível).
+Estado:       DECIDIDO (Rodrigo, 21/11/2026)
+
+[D25] Gráfico do relatório: letras a tamanho real + ridges nominais (21/11/2026, Task 1.2)
+Contexto:     Revisão crítica do task1/relatorio/roofline.py, pedida pelo Rodrigo.
+              Nenhum dado mudou.
+Decisão:      (a) figsize (3.08, 2.10): é a largura final na página (0.88 x 3.5 in).
+                  Antes a figura tinha 3.45 in e o LaTeX encolhia-a; as letras
+                  ficavam com ~4.9 pt e agora ficam com 6 pt. A altura impressa
+                  é a mesma, por isso o relatório continua com 2 páginas.
+              (b) Marcas dos eixos em números normais (1/16 ... 64,
+                  1/4 ... 16 384) em vez de 2^k.
+              (c) (escolha do Rodrigo) Pontos de viragem NOMINAIS como
+                  marcadores ocos (AMD 22.5, A64FX 6.0), ao lado dos medidos
+                  (cheios, 37.7 e 7.4). A explicação fica na legenda da figura
+                  no LaTeX, para a legenda do gráfico não tapar o telhado.
+Porquê:       - Em IEEE as letras das figuras devem ser legíveis impressas.
+              - O texto compara o ridge nominal com o medido (22.5 -> 38) e a
+                D14 previa mostrar os dois. Com marcadores, o gráfico continua
+                limpo (rejeitadas: telhado teórico em linha fina, ou nada).
+Estado:       DECIDIDO (Rodrigo, 21/11/2026)
+
+===============================================================================
+ DECISÕES PENDENTES (a discutir)
+===============================================================================
+
+(nenhuma de momento)
+
+===============================================================================

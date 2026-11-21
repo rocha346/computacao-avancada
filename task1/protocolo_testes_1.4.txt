@@ -1,0 +1,93 @@
+===============================================================================
+ Task 1.4 - LISTA DE TESTES E MÉTRICAS (APROVADO, D12)           20/11/2026
+                                              atualizado 21/11/2026 (D22)
+ Base: D04 (nó inteiro), D16 (tetos), D15 + D22 (tamanhos), D10 (estatística),
+       D11 (profilers). Cada teste: objetivo, o que corre, métricas, o que
+       esperamos (hipótese) e o que nos ensina.
+===============================================================================
+
+Regras gerais do protocolo
+  - Nós em --exclusive; frequência e governor registados (info-*.txt).
+  - Threads fixas: OMP_PROC_BIND=close/spread, OMP_PLACES=cores (registar).
+  - Módulos fixos (D22): carregar EXPLICITAMENTE a versão do compilador que se
+    quer (ex.: ml GCC/15.2.0) e não depender de módulos que trocam o GCCcore
+    (na Task 1 pedimos GCC/13.3.0 e correu o 15.2.0). Em cada job registar
+    gcc -dumpfullversion e ml -t list.
+  - Ciclos em todas as medições de escalabilidade (D22): perf stat -e
+    cycles,task-clock. O clock do AMD desce de 3.38 GHz (1 core) para 2.81
+    (>= 64 cores): o speedup mistura eficiência paralela com o clock (~17%).
+  - 1 aquecimento + 10 repetições; mediana + IQR (D10).
+  - Tempo medido SEM profiler; contadores numa execução à parte (D11).
+  - Métrica principal: tempo/iteração do solve e MLUP/s (impresso pelo código).
+    GFLOP/s = MLUP/s x FLOP/ponto / 1000 (FLOP/ponto contado, ver brainstorm).
+  - Validação: cada versão passa no tools/compare contra a referência.
+
+T1  Linha de base (referência, GCC -O2, 1 thread)
+    Onde: AMD e A64FX; tamanhos L1, LLC-1t, RAM (D15/D22).
+    Métricas: tempo/iter, MLUP/s, GFLOP/s, IPC, misses L1/LLC, bytes da RAM.
+    Hipótese (varcoef, D13): muito abaixo dos tetos por causa da ordem de
+    ciclos errada (stride de um plano), das 7 divisões em double por ponto e
+    do material guardado em int (12 B/ponto em vez de 9).
+    Ensina: ponto de partida e posição da referência no roofline (2.4).
+
+T2  Escalabilidade forte (strong scaling)
+    Onde: AMD 1,2,4,8,16,32,64,128 threads; A64FX 1,2,4,6,12,24,36,48.
+    Tamanhos: LLC-nó e RAM (D22). NÃO usar o LLC-1t com muitas threads:
+    no AMD n=86 / 128 threads = 61 KiB por thread, cabe na L2 privada.
+    Métricas extra: ciclos (perf), para separar eficiência e descida de clock.
+    Métricas: speedup, eficiência, fração série estimada (Karp-Flatt) vs Amdahl.
+    Hipótese: no tamanho RAM o speedup satura quando a banda satura (memory
+    bound); no A64FX satura mais tarde (HBM 1 TB/s vs DDR4 ~410 GB/s).
+    Ensina: onde está o gargalo e a fração série real.
+
+T3  Escalabilidade fraca (weak scaling, Gustafson)
+    Onde: ambas; pontos por thread constante.
+    Métricas: tempo/iter (ideal: constante), eficiência fraca.
+    Ensina: se o problema "cresce bem" com mais recursos (lei de Gustafson).
+
+T4  Colocação NUMA e afinidade
+    Onde: AMD (2 sockets, NPS) e A64FX (4 CMG).
+    Variantes: first-touch paralelo vs série; close vs spread; numactl.
+    Métricas: tempo/iter, banda efetiva.
+    Hipótese: first-touch em série -> teto M2 (D16/D20): medido ABAIXO da
+    banda de 1 nó NUMA (AMD 22.6 GB/s, A64FX 87.7 GB/s).
+
+T5  Vetorização
+    Variantes: -fno-tree-vectorize vs vetorizado; GCC vs Fujitsu (A64FX);
+    AVX2 (AMD) vs SVE 512 (A64FX); relatórios do compilador (-fopt-info-vec).
+    Métricas: tempo, instruções SIMD (perf/fapp), eficiência de vetorização.
+    Hipótese: ganho maior no A64FX (16 lanes) se não for limitado por memória.
+
+T6  Hierarquia de memória e tráfego
+    Onde: 3 tamanhos, 1 e N threads.
+    Métricas: miss rates L1/L2/LLC, bytes lidos da RAM -> AI MEDIDA vs AI
+    calculada; efeito da ordem dos ciclos (teto M1, stride) e da
+    reutilização dos planos de u.
+    Ensina: efeito da ordem dos ciclos (stride) e se a reutilização dos
+    planos vizinhos de u funciona.
+
+T7  Overhead de paralelização
+    Métricas: OpenMP 1 thread vs série; tempo das barreiras e da redução do
+    resíduo (perf/Advisor); custo de calcular o resíduo em todas as iterações.
+
+T8  Energia
+    Métricas: energia até à solução (J), J por ponto atualizado, potência
+    média (W), GFLOP/s por W. AMD: RAPL; A64FX: fapp/sacct; A100: NVML.
+    Ensina: comparação de arquiteturas pedida na 2.7.
+
+T9  GPU (A100, Task 2.5)
+    Métricas: tempo do kernel, H2D/D2H em separado, tempo end-to-end,
+    banda atingida vs 1555 GB/s, ocupação (ncu), roofline do ncu.
+
+T10 Pontos no roofline (Task 2.4)
+    Referência e melhor versão, tamanhos LLC e RAM, nos dois rooflines.
+
+Tamanhos (D15 + D22), referência varcoef 12 B/ponto, (n+2)^3 pontos:
+  L1      AMD n=11 (25.7 KiB)          A64FX n=14 (48 KiB)
+  LLC-1t  AMD n=86 (7.8 MiB)           A64FX n=68 (3.9 MiB)      <- 1 thread
+  LLC-nó  AMD n=250 (183 MiB: 1.4 MiB/thread > L2 512 KiB, 5.7 MiB/CCX < 16 MiB)
+          A64FX n=110 (16 MiB: 343 KiB/thread > L1, 4 MiB/CMG = metade da L2)
+                                                                 <- todas as threads
+  RAM     n=520 nas duas (1.59 GiB a 12 B/ponto; 1.19 GiB a 9 B/ponto) > 1 GiB
+  Recalcular a pegada de CADA versão otimizada (README do professor).
+===============================================================================

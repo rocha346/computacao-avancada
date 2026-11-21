@@ -1,0 +1,4 @@
+CSV,mode,rep,n,ms,GBps
+CSV,triad,0,4194304,0.128,393.2
+CSV,triad,1,4194304,0.046,1092.3
+CSV,triad,2,4194304,0.045,1117.1

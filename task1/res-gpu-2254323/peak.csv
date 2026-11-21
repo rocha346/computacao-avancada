@@ -1,0 +1,4 @@
+CSV,mode,rep,blocks,threads,iters,ms,GFLOPs
+CSV,peak,0,864,256,1000,0.387,9142.9
+CSV,peak,1,864,256,1000,0.245,14460.3
+CSV,peak,2,864,256,1000,0.245,14460.3

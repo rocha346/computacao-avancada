@@ -1,0 +1,19 @@
+# slides e PDFs das aulas (grandes; o André já os tem)
+teoria-pratica/
+work-assigment/*.pptx
+# binários e builds
+*.o
+*.exe
+*.out.bin
+build-*/
+# lixo do LaTeX
+*.aux
+*.log
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+# Windows/editores
+Thumbs.db
+desktop.ini
+.vscode/
+task1/mei.2026*/

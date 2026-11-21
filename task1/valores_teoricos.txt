@@ -1,0 +1,114 @@
+===============================================================================
+ Task 1.1 - VALORES TEÓRICOS (datasheets)                      atualizado 20/11/2026 com info-*.txt
+ Tudo o que tem [confirmar] tem de ser verificado com os ficheiros info-*.txt
+ do Deucalion (D02: teórico + medido).
+===============================================================================
+
+Fórmula do pico FP:
+  Pico = #cores x frequência (GHz) x FLOPs/ciclo/core
+  FLOPs/ciclo/core = #unidades FMA x (largura SIMD / bits do tipo) x 2 (FMA = mul+add)
+
+-------------------------------------------------------------------------------
+1) Partição x86 - nó com 2x AMD EPYC 7742 (Zen 2, "Rome")
+-------------------------------------------------------------------------------
+  Fabricante/modelo     AMD EPYC 7742, 7 nm, socket SP3, TDP 225 W
+  Cores                 64 cores / 128 threads (SMT2) por socket -> 128 cores/nó
+                        16 CCX de 4 cores (8 CCD), ligados por Infinity Fabric
+  Frequência            base 2.25 GHz, boost até 3.4 GHz
+                        [OBSERVADO] governor 'performance', boost ATIVO:
+                        scaling_cur_freq = 3.40 GHz (x86) / 3.29 GHz (nó GPU)
+                        -> o pico depende da frequência real sob carga AVX2!
+  SIMD                  AVX2 (256 bits), 2 unidades FMA por core
+                        SP: 2 x (256/32) x 2 = 32 FLOP/ciclo/core
+                        DP: 2 x (256/64) x 2 = 16 FLOP/ciclo/core
+  Pico SP (base)        64 x 2.25 x 32 = 4 608 GFLOP/s por socket
+                        9 216 GFLOP/s por nó (2 sockets)
+  Pico DP (base)        2 304 GFLOP/s por socket, 4 608 GFLOP/s por nó
+  Caches                L1d 32 KiB/core (8-way), L1i 32 KiB/core
+                        L2 512 KiB/core (privada, 8-way)
+                        L3 16 MiB por CCX (partilhada por 4 cores)
+                           -> 256 MiB por socket (NÃO é uma L3 unificada!)
+                        linha de cache 64 B
+  Memória               DDR4-3200, 8 canais por socket
+                        banda teórica 8 x 3.2 GT/s x 8 B = 204.8 GB/s por socket
+                        409.6 GB/s por nó
+                        tamanho por nó: 256 GiB (MemTotal 252 GiB) [CONFIRMADO]
+                        32 GiB por nó NUMA, 8 nós NUMA
+  Latência memória      [medir] (tipicamente ~90-120 ns em Zen 2)
+  NUMA                  NPS4 [CONFIRMADO]: 8 nós NUMA (4 por socket), 16 cores
+                        (4 CCX) cada, 2 canais DDR4 por nó NUMA (~51.2 GB/s).
+                        Distâncias: 10 local, 12 mesmo socket, 32 outro socket.
+
+-------------------------------------------------------------------------------
+2) Partição ARM - nó com 1x Fujitsu A64FX
+-------------------------------------------------------------------------------
+  Fabricante/modelo     Fujitsu A64FX (Armv8.2-A + SVE), 7 nm
+  Cores                 48 cores de computação em 4 CMG (Core Memory Groups)
+                        de 12 cores (+ cores assistentes não usados pelo user)
+  Frequência            NÃO visível no Linux (sem cpufreq em /sys) -> usar
+                        datasheet do Deucalion (2.0 GHz) e MEDIR (ciclos/tempo)
+  SIMD                  SVE 512 bits, 2 pipelines FMA por core
+                        SP: 2 x (512/32) x 2 = 64 FLOP/ciclo/core
+                        DP: 2 x (512/64) x 2 = 32 FLOP/ciclo/core
+  Pico SP @2.0 GHz      48 x 2.0 x 64 = 6 144 GFLOP/s   (@1.8 GHz: 5 530)
+  Pico DP @2.0 GHz      3 072 GFLOP/s                    (@1.8 GHz: 2 765)
+  Caches                L1d 64 KiB/core (4-way), L1i 64 KiB/core
+                        L2 8 MiB por CMG (16-way), partilhada pelos 12 cores
+                           -> 32 MiB no chip; NÃO há L3 (a L2 é a LLC)
+                        [OBSERVADO] o kernel NÃO expõe as caches (sem
+                        /sys/.../cache, lstopo sem caches): valores do manual
+                        + confirmar pela curva de latência (D07)
+                        linha de cache 256 B (!)
+  Memória               HBM2, 4 stacks de 8 GiB = 32 GiB (1 stack por CMG)
+                        banda teórica 4 x 256 GB/s = 1 024 GB/s
+  Latência memória      [medir] (HBM tem latência MAIOR que DDR4, apesar
+                        de muito mais banda)
+  NUMA                  4 nós NUMA (1 por CMG) [CONFIRMADO], 12 cores cada,
+                        ~8 GiB cada. Distâncias 10/20/30: os CMG estão em
+                        PARES (0-1 e 2-3), CMG 0->2 mais longe que 0->1.
+                        Memória para jobs: 30 000 MB (Slurm RealMemory).
+
+-------------------------------------------------------------------------------
+3) Partição A100 - nó com 4x NVIDIA A100 40GB + 2x AMD EPYC 7742
+-------------------------------------------------------------------------------
+  Fabricante/modelo     NVIDIA A100-SXM4-40GB (Ampere, GA100), 7 nm
+                        [CONFIRMADO: A100-SXM4-40GB, driver 580, CUDA 13.0]
+  SMs / cores           108 SMs, 64 cores FP32 por SM = 6 912 cores FP32
+                        432 Tensor Cores (3ª geração)
+  Frequência            boost 1 410 MHz [CONFIRMADO max SM clock]
+                        (clock por defeito das aplicações: 1 095 MHz!)
+  Pico FP32             6 912 x 1.41 x 2 = 19.5 TFLOP/s
+  Pico FP64             9.7 TFLOP/s (19.5 com Tensor Cores)
+  Pico TF32 (tensor)    156 TFLOP/s (não usamos: o Jacobi não é matricial)
+  Caches                L1/shared memory 192 KiB por SM (configurável)
+                        L2 40 MiB
+  Memória               40 GiB HBM2, bus 5120 bits
+                        clock memória 1 215 MHz [CONFIRMADO]
+                        banda = 1.215 GHz x 2 (DDR) x 5120 bit / 8 = 1 555 GB/s
+                        ECC ATIVO (reduz um pouco a banda útil)
+  TDP                   400 W (SXM4)
+  CPU do nó             2x AMD EPYC 7742 (igual à partição x86)
+  Ligação CPU-GPU       PCIe 4.0 x16 [CONFIRMADO] (~32 GB/s por sentido)
+                        afinidade NUMA da GPU0 = nó 2 (cores 32-47): threads
+                        host que fazem cópias devem estar nesse nó
+  Partilha              nó GPU partilhado (3 GPUs ocupadas por outros no
+                        teste) -> --exclusive para tempos e energia
+  #SMs                  não aparece no nvidia-smi; deviceQuery não existe
+                        -> confirmar 108 SMs com cudaGetDeviceProperties
+
+-------------------------------------------------------------------------------
+Pontos de viragem (ridge point = pico SP / banda memória), para a 1.2
+-------------------------------------------------------------------------------
+  AMD 7742 (1 socket)   4 608 / 204.8  ~ 22.5 FLOP/B
+  AMD 7742 (nó)         9 216 / 409.6  ~ 22.5 FLOP/B
+  A64FX @2.0 GHz        6 144 / 1 024  ~  6.0 FLOP/B
+  A100                  19 500 / 1 555 ~ 12.5 FLOP/B
+  -> O A64FX "vira" para compute-bound com muito menos intensidade aritmética:
+     é relevante para o box27 (D01).
+
+Fontes a citar no relatório (a completar):
+  - AMD EPYC 7742 product page / "Zen 2" Software Optimization Guide
+  - Fujitsu A64FX Microarchitecture Manual / Datasheet
+  - NVIDIA A100 Tensor Core GPU Architecture whitepaper (2020)
+  - Slides 05_Architectures, 07_A64FX e 09_GPUs das aulas
+===============================================================================

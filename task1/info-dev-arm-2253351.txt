@@ -1,0 +1,167 @@
+
+================ data / nó ================
+Fri Nov 20 12:07:30 WET 2026
+cna0001.deucalion.macc.fccn.pt
+Linux cna0001.deucalion.macc.fccn.pt 4.18.0-348.23.1.el8_5.aarch64 #1 SMP Wed Apr 27 19:07:21 UTC 2022 aarch64 aarch64 aarch64 GNU/Linux
+
+================ slurm ================
+NodeName=cna0001 Arch=aarch64 CoresPerSocket=12 
+   CPUAlloc=48 CPUEfctv=48 CPUTot=48 CPULoad=0.01
+   AvailableFeatures=(null)
+   ActiveFeatures=(null)
+   Gres=(null)
+   NodeAddr=cna0001.deucalion.macc.fccn.pt NodeHostName=cna0001.deucalion.macc.fccn.pt Version=23.11.8
+   OS=Linux 4.18.0-348.23.1.el8_5.aarch64 #1 SMP Wed Apr 27 19:07:21 UTC 2022 
+   RealMemory=30000 AllocMem=30000 FreeMem=29012 Sockets=4 Boards=1
+   State=ALLOCATED ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A
+   Partitions=dev-arm 
+   BootTime=2026-11-11T10:17:09 SlurmdStartTime=2026-11-11T10:18:07
+   LastBusyTime=2026-11-20T11:03:19 ResumeAfterTime=None
+   CfgTRES=cpu=48,mem=30000M,billing=48
+   AllocTRES=cpu=48,mem=30000M
+   CapWatts=n/a
+   CurrentWatts=0 AveWatts=0
+   ExtSensorsJoules=n/a ExtSensorsWatts=0 ExtSensorsTemp=n/a
+
+
+================ lscpu ================
+Architecture:        aarch64
+Byte Order:          Little Endian
+CPU(s):              48
+On-line CPU(s) list: 0-47
+Thread(s) per core:  1
+Core(s) per cluster: 12
+Socket(s):           -
+Cluster(s):          4
+NUMA node(s):        4
+Vendor ID:           FUJITSU
+Model:               0
+Model name:          A64FX
+Stepping:            0x1
+BogoMIPS:            200.00
+NUMA node0 CPU(s):   0-11
+NUMA node1 CPU(s):   12-23
+NUMA node2 CPU(s):   24-35
+NUMA node3 CPU(s):   36-47
+Flags:               fp asimd evtstrm sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm fcma dcpop sve
+
+================ lscpu -C (caches) ================
+
+================ caches em /sys (cpu0) ================
+cat: '/sys/devices/system/cpu/cpu0/cache/index*/level': No such file or directory
+cat: '/sys/devices/system/cpu/cpu0/cache/index*/type': No such file or directory
+cat: '/sys/devices/system/cpu/cpu0/cache/index*/size': No such file or directory
+cat: '/sys/devices/system/cpu/cpu0/cache/index*/coherency_line_size': No such file or directory
+cat: '/sys/devices/system/cpu/cpu0/cache/index*/shared_cpu_list': No such file or directory
+  size= ways= line= shared_with=
+
+================ numactl -H ================
+available: 4 nodes (0-3)
+node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11
+node 0 size: 7629 MB
+node 0 free: 6620 MB
+node 1 cpus: 12 13 14 15 16 17 18 19 20 21 22 23
+node 1 size: 8176 MB
+node 1 free: 7579 MB
+node 2 cpus: 24 25 26 27 28 29 30 31 32 33 34 35
+node 2 size: 8176 MB
+node 2 free: 7279 MB
+node 3 cpus: 36 37 38 39 40 41 42 43 44 45 46 47
+node 3 size: 8158 MB
+node 3 free: 7641 MB
+node distances:
+node     0    1    2    3 
+   0:   10   20   30   30 
+   1:   20   10   30   30 
+   2:   30   30   10   20 
+   3:   30   30   20   10 
+
+================ lstopo ================
+Machine (31GB total)
+  Group0 L#0
+    Package L#0
+      NUMANode L#0 (P#0 7629MB)
+      Core L#0 + PU L#0 (P#0)
+      Core L#1 + PU L#1 (P#1)
+      Core L#2 + PU L#2 (P#2)
+      Core L#3 + PU L#3 (P#3)
+      Core L#4 + PU L#4 (P#4)
+      Core L#5 + PU L#5 (P#5)
+      Core L#6 + PU L#6 (P#6)
+      Core L#7 + PU L#7 (P#7)
+      Core L#8 + PU L#8 (P#8)
+      Core L#9 + PU L#9 (P#9)
+      Core L#10 + PU L#10 (P#10)
+      Core L#11 + PU L#11 (P#11)
+    Package L#1
+      NUMANode L#1 (P#1 8176MB)
+      Core L#12 + PU L#12 (P#12)
+      Core L#13 + PU L#13 (P#13)
+      Core L#14 + PU L#14 (P#14)
+      Core L#15 + PU L#15 (P#15)
+      Core L#16 + PU L#16 (P#16)
+      Core L#17 + PU L#17 (P#17)
+      Core L#18 + PU L#18 (P#18)
+      Core L#19 + PU L#19 (P#19)
+      Core L#20 + PU L#20 (P#20)
+      Core L#21 + PU L#21 (P#21)
+      Core L#22 + PU L#22 (P#22)
+      Core L#23 + PU L#23 (P#23)
+  Group0 L#1
+    Package L#2
+      NUMANode L#2 (P#2 8176MB)
+      Core L#24 + PU L#24 (P#24)
+      Core L#25 + PU L#25 (P#25)
+      Core L#26 + PU L#26 (P#26)
+      Core L#27 + PU L#27 (P#27)
+      Core L#28 + PU L#28 (P#28)
+      Core L#29 + PU L#29 (P#29)
+      Core L#30 + PU L#30 (P#30)
+      Core L#31 + PU L#31 (P#31)
+      Core L#32 + PU L#32 (P#32)
+      Core L#33 + PU L#33 (P#33)
+      Core L#34 + PU L#34 (P#34)
+      Core L#35 + PU L#35 (P#35)
+    Package L#3
+      NUMANode L#3 (P#3 8158MB)
+      Core L#36 + PU L#36 (P#36)
+      Core L#37 + PU L#37 (P#37)
+      Core L#38 + PU L#38 (P#38)
+      Core L#39 + PU L#39 (P#39)
+      Core L#40 + PU L#40 (P#40)
+      Core L#41 + PU L#41 (P#41)
+      Core L#42 + PU L#42 (P#42)
+      Core L#43 + PU L#43 (P#43)
+      Core L#44 + PU L#44 (P#44)
+      Core L#45 + PU L#45 (P#45)
+      Core L#46 + PU L#46 (P#46)
+      Core L#47 + PU L#47 (P#47)
+
+================ meminfo ================
+MemTotal:       32911424 kB
+MemFree:        29822528 kB
+MemAvailable:   29947840 kB
+Buffers:           11840 kB
+Cached:           286848 kB
+
+================ cpuinfo (1º core) ================
+processor	: 0
+BogoMIPS	: 200.00
+Features	: fp asimd evtstrm sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm fcma dcpop sve
+CPU implementer	: 0x46
+CPU architecture: 8
+CPU variant	: 0x1
+CPU part	: 0x001
+CPU revision	: 0
+
+================ frequências ================
+
+================ módulos carregados ================
+
+Currently Loaded Modules:
+  1) GCCcore/15.2.0                  4) libxml2/2.15.1-GCCcore-15.2.0
+  2) numactl/2.0.19-GCCcore-15.2.0   5) libpciaccess/0.19-GCCcore-15.2.0
+  3) zlib/2.3.2-GCCcore-15.2.0       6) hwloc/2.13.0-GCCcore-15.2.0
+
+ 
+

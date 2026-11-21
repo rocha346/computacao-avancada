@@ -1,0 +1,35 @@
+>> triad L2
+>> stream
+== pages.txt
+PAGESIZE=65536
+THP=always madvise [never]
+AnonHugePages:         0 kB
+ShmemHugePages:        0 kB
+FileHugePages:         0 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+== STREAM Triad (MB/s) por versao e threads
+vanilla T=12 46975.8
+vanilla T=24 44552.9
+vanilla T=48 42754.9
+openmp T=12 152815.4
+openmp T=24 304038.3
+openmp T=48 606268.4
+zfill T=12 205766.0
+zfill T=24 407977.3
+zfill T=48 812866.0
+zfill-acle T=12 205126.6
+zfill-acle T=24 406946.5
+zfill-acle T=48 811800.8
+== triad L2 (GB/s): threads, KiB/thread, valores
+1 128.0: 64.7 64.8 64.6 64.7 64.7 64.6 64.5 64.5 64.6 64.7 64.7
+1 256.0: 65.9 66.0 66.0 65.9 66.0 66.0 66.0 66.0 65.9 66.0 66.0
+12 128.0: 688.6 693.5 694.2 694.7 694.4 694.4 693.4 694.6 693.7 696.8 696.6
+12 256.0: 706.2 705.9 705.9 704.7 705.8 706.0 706.0 705.7 706.0 705.5 705.9
+48 128.0: 2650.4 2650.5 2652.0 2650.6 2650.4 2647.8 2652.7 2646.0 2651.3 2650.4 2649.7
+48 256.0: 2680.6 2680.2 2679.7 2680.4 2678.7 2680.8 2680.3 2678.6 2680.2 2681.9 2678.8
+RESUMO: 0 FALHOU   (resultados em res-corr-arm-2254226/)
