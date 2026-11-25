@@ -1,0 +1,48 @@
+== dmi (fabricante e modelo do no)
+sys_vendor       Bull SAS
+product_name     G262-ZR0-00
+product_version  0100
+board_vendor     GIGABYTE
+board_name       MZ62-HD5-00
+== nvidia-smi -L
+GPU 0: NVIDIA A100-SXM4-40GB (UUID: GPU-85191ee5-5959-4d39-4bb6-264192789e6c)
+== nvidia-smi topo -m
+	[4mGPU0	NIC0	NIC1	CPU Affinity	NUMA Affinity	GPU NUMA ID[0m
+GPU0	 X 	SYS	PXB		6		N/A
+NIC0	SYS	 X 	SYS				
+NIC1	PXB	SYS	 X 				
+
+Legend:
+
+  X    = Self
+  SYS  = Connection traversing PCIe as well as the SMP interconnect between NUMA nodes (e.g., QPI/UPI)
+  NODE = Connection traversing PCIe as well as the interconnect between PCIe Host Bridges within a NUMA node
+  PHB  = Connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)
+  PXB  = Connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge)
+  PIX  = Connection traversing at most a single PCIe bridge
+  NV#  = Connection traversing a bonded set of # NVLinks
+
+NIC Legend:
+
+  NIC0: mlx5_0
+  NIC1: mlx5_1
+
+== nvidia-smi nvlink -s
+GPU 0: NVIDIA A100-SXM4-40GB (UUID: GPU-85191ee5-5959-4d39-4bb6-264192789e6c)
+	 Link 0: 25 GB/s
+	 Link 1: 25 GB/s
+	 Link 2: 25 GB/s
+	 Link 3: 25 GB/s
+	 Link 4: 25 GB/s
+	 Link 5: 25 GB/s
+	 Link 6: 25 GB/s
+	 Link 7: 25 GB/s
+	 Link 8: 25 GB/s
+	 Link 9: 25 GB/s
+	 Link 10: 25 GB/s
+	 Link 11: 25 GB/s
+== Slurm (GPUs do no)
+NodeName=gnx510 Arch=x86_64 CoresPerSocket=16 
+   Gres=gpu:a100:4(S:0-1)
+   CfgTRES=cpu=128,mem=484G,billing=128,gres/gpu=4
+   AllocTRES=cpu=96,mem=363G,gres/gpu=3

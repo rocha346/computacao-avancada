@@ -29,7 +29,8 @@ harmonic means, $\kappa_{pq}=2k_pk_q/(k_p+k_q)$. The reference performs about 45
 writes \texttt{u\_new}: 12 useful bytes per point (16 moved, with write-allocate), an operational
 intensity (OI) of 45/12~=~3.75~FLOP/B. With the residual and the copy back to \texttt{u}, a full
 iteration moves 28 useful bytes for 48~FLOP (1.71~FLOP/B), and the inner loop strides by one plane.
-All runs used whole nodes, pinned threads and GCC~15.2 (\texttt{-march=znver2}, \texttt{-mcpu=a64fx}).
+Datasheet peaks hide this kernel's real limits (divisions, strides, NUMA), so we measure each one
+before optimising in Task~2.
 
 \section{Hardware characterisation (1.1)}
 Table~\ref{tab:hw} sets vendor values~\cite{amd56305,a64fx,a100} and system queries
@@ -42,24 +43,24 @@ random (Sattolo) cycle, defeating prefetch. Medians of 10 runs after a warm-up;
 IQR below 1.1\% for microbenchmarks.
 
 \begin{table}[!t]\centering\scriptsize
-\caption{Platforms, FP32 per node: nominal / measured}\label{tab:hw}
+\caption{Platforms, FP32 per node (A100: per GPU): nominal / measured}\label{tab:hw}
 \setlength{\tabcolsep}{1.6pt}
 \resizebox{\columnwidth}{!}{\begin{tabular}{@{}lccc@{}}\toprule
  & \textbf{x86} & \textbf{ARM} & \textbf{A100} \\ \midrule
-Node & Bull H262-Z61 & Fujitsu PRIMEHPC FX700 & -- \\
+Node & Bull H262-Z61 & Fujitsu PRIMEHPC FX700 & 4$\times$A100, 2 EPYC \\
 Device & 2$\times$AMD EPYC 7742 & Fujitsu A64FX & NVIDIA A100-SXM4 \\
 Cores; FP32/cycle & 128 (Zen 2); 32/core & 48 (4 CMG); 64/core & 108 SM; 128/SM \\
 Clock (GHz) & 2.25 / 2.81 & 2.0 / 2.0 & 1.41 / 1.41 \\
 Peak (GFLOP/s) & 9216 / 11\,269 & 6144 / 6049 & 19\,500 / 19\,188 \\
 L1d; L2 & 32 KiB; 512 KiB/core & 64 KiB; 8 MiB/CMG & 192 KiB/SM; 40 MiB \\
-L3; LLC BW & 16 MiB/CCX; 5036 GB/s & --; 2680 GB/s & --; -- \\
-Memory & 256 GiB DDR4 & 32 GiB HBM2 & 40 GB HBM2 \\
+L3; LLC BW & 16 MiB/CCX; 5036 GB/s & --; 2680 GB/s & --; 3067 GB/s \\
+Memory & 256 GiB DDR4 & 32 GiB HBM2 & 40 GiB HBM2 \\
 BW (GB/s) & 409.6 / 299 (224) & 1024 / 813 (606) & 1555 / 1274 \\
 Lat. L1/L2/L3 (ns) & 1.2 / 3.6 / 10.1 & 2.5 / $\sim$25 & 27.6 / 150--305 \\
 Lat. memory & $\sim$105 ns & 144 ns & $\sim$410 ns \\
 NUMA nodes & 8 (NPS4) & 4 & -- \\ \bottomrule
 \end{tabular}}\\[1pt]
-\raggedright\scriptsize Memory BW without (with) write-allocate, STREAM; A100: Triad (no write-allocate).
+\raggedright\scriptsize Memory BW without (with) write-allocate, STREAM; A100: Triad (no write-allocate); its LLC: Triad on the L2, 12~MiB.
 \end{table}
 
 \emph{What measuring revealed.} (i)~Under an all-core AVX2 load the EPYC runs at 2.81~GHz
@@ -67,8 +68,7 @@ NUMA nodes & 8 (NPS4) & 4 & -- \\ \bottomrule
 under sustained load (a short test at its 1095~MHz application clock gave the scaled peak within
 3\%). The peak depends on the \emph{real} clock. (ii)~The A64FX
 kernel exposes no cache data; the latency curve recovered the 64~KiB L1, the 8~MiB L2 per CMG and
-two TLB knees (1 and 64~MiB: 16 and 1024 entries of 64~KiB pages). (iii)~One AMD thread sees only its CCX's 16~MiB L3. (iv)~The A100 L2 is two 20~MiB halves; the far one doubles
-latency.
+two TLB knees (1 and 64~MiB: 16 and 1024 entries of 64~KiB pages). (iii)~One AMD thread sees only its CCX's 16~MiB L3. (iv)~The A100 L2 is two 20~MiB halves; the far one doubles latency; its bandwidth (3.1~TB/s) falls to HBM level by 48~MiB.
 
 \emph{Validation and problems found.} Fujitsu SSL2 SGEMM reached 65\% of the A64FX peak. OpenBLAS
 SGEMM ($n=16384$) reached 4.5--5.6~TFLOP/s on 128 cores (40--49\%, $\sim$20\% job to job), but 64 threads already reach 70--84\% of the 64-core peak: the gap is in scaling across sockets,
@@ -80,9 +80,9 @@ STREAM, which our script had skipped.
 Fig.~\ref{fig:roof} draws both rooflines in one graph (Appendix~A of~\cite{roofline}) with measured
 peaks and the best measured bandwidth (M4, no write-allocate). The ridge points move from 22.5 and
 6.0~FLOP/B (nominal) to 38 (AMD) and 7.4 (A64FX); 50 and 10 with write-allocate. On the AMD the real clock (+22\%) and DDR4 at 73\% of nominal both push it right. At
-the sweep OI (3.75) a \emph{parallel} version with the reference arithmetic (E1) is memory bound at
-about 0.84~TFLOP/s (AMD) and 2.3~TFLOP/s (A64FX): HBM gives the A64FX 2.7$\times$ the bandwidth with
-only 54\% of the AMD peak. The serial, strided reference sits far lower (Sec.~IV).
+the sweep OI (3.75) the plain roofline caps a \emph{parallel} E1 (reference arithmetic) at 0.84/2.3~TFLOP/s
+(AMD/A64FX) with normal stores (M3), 1.1/3.0 with M4: HBM gives the A64FX 2.7$\times$ the bandwidth
+with only 54\% of the AMD peak. Yet divisions cap the A64FX E1 near 0.1~TFLOP/s (Sec.~IV).
 
 \begin{figure}[!t]\centering
 \includegraphics[width=0.88\columnwidth]{roofline.pdf}
@@ -95,11 +95,11 @@ As in~\cite{roofline}, ceilings go from what the reference gets (bottom) to what
 (top), the same on both machines (Table~\ref{tab:ceil}).
 
 \begin{table}[!t]\centering\scriptsize
-\caption{Ceilings, bottom to top (GFLOP/s, GB/s; measured)}\label{tab:ceil}
+\caption{Ceilings, bottom to top (GFLOP/s, GB/s; measured or derived)}\label{tab:ceil}
 \begin{tabular}{@{}llrr@{}}\toprule
  & \textbf{Ceiling and why it applies to varcoef} & \textbf{AMD} & \textbf{A64FX} \\ \midrule
 C1 & 7 divisions/point, scalar, 1 thread (reference) & 6.2 & 0.44 \\
-C2 & scalar, 1 thread, no harmonic divisions (E2) & 13.5 & 8.0 \\
+C2 & scalar, 1 thread, no divisions (E2 + reciprocal) & 13.5 & 8.0 \\
 C3 & scalar, all cores (OpenMP) & 1589 & 379 \\
 C4 & SIMD without FMA & 10\,536 & 3022 \\
 C5 & SIMD + FMA (peak) & 11\,269 & 6049 \\ \midrule
@@ -133,17 +133,16 @@ are effective-bandwidth ceilings for that count, so no traffic is counted twice.
 drops to 1.4 and 0.8~GB/s. \textbf{M2}: STREAM under \texttt{numactl -{}-membind=0}, as when one
 thread initialises the arrays, lost 9.8$\times$ (AMD) and 6.9$\times$ (A64FX), below what one node gives its own cores (remote
 threads add fabric latency and contention): parallel first touch is mandatory. \textbf{M3/M4}: a normal store first reads the line (32~B moved, 24~B counted);
-the A64FX \texttt{zfill} STREAM (\texttt{DC ZVA}) gains 34\%, exactly 32/24, and its Copy with
-write-allocate moves $549.6\times24/16=824$~GB/s, the same as \texttt{zfill}. The order M1~$<$~M2~$<$~M3~$<$~M4 holds on both.
+the A64FX \texttt{zfill} STREAM (\texttt{DC ZVA}) gains 34\%, exactly 32/24. The order M1~$<$~M2~$<$~M3~$<$~M4 holds on both.
 
 \section{Testing methodology for Task 2 (1.4)}
-\emph{Protocol.} Exclusive nodes; modules loaded with explicit versions and logged with clock and
-governor; threads pinned (\texttt{OMP\_PLACES=cores}); GCC~15.2, plus \texttt{fcc} on the A64FX and
-\texttt{nvcc} (sm\_80) on the A100. One warm-up and 10 runs, reporting median and IQR (run times
-have outlier tails that bias a mean). Cycles (\texttt{perf stat}) in every scaling run, as the AMD
+\emph{Protocol.} Exclusive nodes; explicit module versions, logged with clock and governor;
+ threads pinned (\texttt{OMP\_PLACES=cores}); GCC~15.2 (\texttt{-march=znver2}, \texttt{-mcpu=a64fx}), plus \texttt{fcc} (A64FX) and
+\texttt{nvcc} (sm\_80, A100). One warm-up and 10 runs, reporting median and IQR (robust to
+outliers). Cycles (\texttt{perf stat}) in every scaling run, as the AMD
 clock drops from 3.38 to 2.81~GHz with core count. Time is measured without a profiler; each version
 is checked against the reference output; a short \texttt{dev} run precedes every long job.
-\emph{Profilers.} \texttt{perf} and PAPI exist on both CPUs, so their counters compare fairly;
+\emph{Profilers.} \texttt{perf} and PAPI exist on both CPUs, so counters compare fairly;
 vendor tools add what they miss: \texttt{fapp} on the A64FX (SVE use, energy) and Nsight
 Systems/Compute on the A100 (transfers, occupancy). Energy: RAPL via \texttt{perf} (AMD),
 \texttt{fapp} (A64FX), NVML (A100). \emph{Tests}: Table~\ref{tab:tests}.
@@ -152,14 +151,14 @@ Systems/Compute on the A100 (transfers, occupancy). Energy: RAPL via \texttt{per
 \caption{Planned tests, metrics and expected outcome}\label{tab:tests}
 \begin{tabular}{@{}lp{0.66\columnwidth}p{0.22\columnwidth}@{}}\toprule
 T1 & Reference, 1 thread: time, MLUP/s, GFLOP/s, IPC & C1, M1 (1 thr.) \\
-T2 & Strong scaling to 128/48 thr.\ (LLC-node, RAM): speedup & saturates at BW \\
+T2 & Strong scaling (Amdahl), 128/48 thr., 2 sizes: speedup & saturates at BW \\
 T3 & Weak scaling (Gustafson): time at fixed points/thread & flat if BW scales \\
 T4 & NUMA: serial/parallel first touch, close/spread & up to 7--10$\times$ (M2) \\
 T5 & Vectorisation on/off, GCC vs.\ \texttt{fcc}: SIMD instr. & larger on A64FX \\
 T6 & Misses, DRAM bytes $\Rightarrow$ measured vs.\ computed OI & loop order, reuse \\
 T7 & Parallel overhead: barriers, residual reduction & cost of residual \\
 T8 & Energy: J to solution, J/point, GFLOP/s/W & compare partitions \\
-T9 & A100: kernel time, H2D/D2H, occupancy & BW vs.\ 1274 GB/s \\
+T9 & A100: kernel, H2D/D2H, occupancy, Amdahl~\cite{hillmarty} & BW vs.\ 1274 GB/s \\
 T10 & Reference and best version on both rooflines & gap to ceilings \\ \bottomrule
 \end{tabular}
 \end{table}
@@ -169,15 +168,16 @@ T10 & Reference and best version on both rooflines & gap to ceilings \\ \bottomr
 the private levels: $n=86$ (7.8~MiB of a 16~MiB L3) and $n=68$ (3.9~MiB of an 8~MiB L2).
 \textbf{LLC-node} (all threads; $n=86$ would leave 61~KiB per thread, an L2 test):
 $n=250$ (183~MiB: 1.4~MiB per thread, 5.7~MiB per CCX) and $n=110$ (16~MiB: 343~KiB per thread,
-4~MiB per CMG). \textbf{RAM}: $n=520$ on both (1.59~GiB; 1.19~GiB with a 1-byte material), not a power of two
-(aliasing), within one CMG's 8~GiB.
+4~MiB per CMG; A100: half its L2). \textbf{RAM}: $n=520$ on all (1.59~GiB; 1.19~GiB with a 1-byte material), not a power of two
+(aliasing).
 
-{\let\footnotesize\scriptsize\begin{thebibliography}{6}
+{\let\footnotesize\scriptsize\begin{thebibliography}{7}
 \bibitem{amd56305} AMD, ``Software Optimization Guide for AMD Family 17h Models 30h and Greater Processors,'' Pub.\ 56305, Advanced Micro Devices, 2020.
 \bibitem{a64fx} Fujitsu, ``A64FX Microarchitecture Manual,'' v1.7, Fujitsu Ltd., May 2022.
 \bibitem{a100} NVIDIA, ``NVIDIA A100 Tensor Core GPU Architecture,'' whitepaper, NVIDIA Corp., 2020.
 \bibitem{stream} J.~D. McCalpin, ``Memory bandwidth and machine balance in current high performance computers,'' \emph{IEEE TCCA Newsletter}, pp.~19--25, Dec.\ 1995.
 \bibitem{roofline} S.~Williams, A.~Waterman, and D.~Patterson, ``Roofline: an insightful visual performance model for floating-point programs and multicore architectures,'' Tech.\ Rep.\ UCB/EECS-2008-134, Univ.\ of California, Berkeley, Oct.\ 2008.
-\bibitem{uopsinfo} A.~Abel and J.~Reineke, ``uops.info: characterizing latency, throughput, and port usage of instructions on Intel microarchitectures,'' in \emph{Proc.\ ASPLOS}, ACM, 2019, pp.~673--686; Zen~2 tables online at https://uops.info (accessed Nov.\ 2026).
+\bibitem{uopsinfo} A.~Abel and J.~Reineke, ``uops.info: characterizing latency, throughput, and port usage of instructions on Intel microarchitectures,'' in \emph{Proc.\ ASPLOS}, 2019, pp.~673--686; Zen~2 tables: https://uops.info, Nov.\ 2026.
+\bibitem{hillmarty} M.~D. Hill and M.~R. Marty, ``Amdahl's law in the multicore era,'' \emph{Computer}, 41(7), 2008.
 \end{thebibliography}}
 \end{document}

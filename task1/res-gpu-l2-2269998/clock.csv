@@ -1,0 +1,5 @@
+timestamp, clocks.current.sm [MHz], clocks.current.memory [MHz], power.draw [W]
+2026/11/25 12:25:39.862, 210 MHz, 1215 MHz, 50.22 W
+2026/11/25 12:25:40.070, 210 MHz, 1215 MHz, 51.09 W
+2026/11/25 12:25:40.272, 1095 MHz, 1215 MHz, 59.30 W
+2026/11/25 12:25:40.475, 1095 MHz, 1215 MHz, 58.97 W

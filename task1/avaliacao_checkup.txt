@@ -1,0 +1,226 @@
+AVALIAÇÃO DO "CHECK-UP CRÍTICO DA TASK 1" (outra ferramenta)       25/11/2026
+==========================================================================
+Objetivo: ver, ponto a ponto, se o check-up tem razão. Cada afirmação foi
+conferida contra os ficheiros reais: relatorio_task1.tex, decisoes.txt (até
+D27), analise_resultados_t1.txt, protocolo_testes_1.4.txt, valores_teoricos.txt,
+dados brutos no PC (res-*, info-*), o enunciado (Work Assignment 2(1).pdf) e o
+código do professor (github ampereira90/WA2-2026, varcoef/grid.cpp e jacobi.cpp).
+NADA foi alterado no relatório nem no decisoes.txt.
+
+Legenda:  CERTO | PARCIAL (tem razão em parte, ou a conta está certa mas a
+conclusão não) | ERRADO | NÃO VERIFICÁVEL (não temos dados que o provem)
+
+--------------------------------------------------------------------------
+0. PRAZO: "dia 28"                                               -> ERRADO
+--------------------------------------------------------------------------
+O enunciado diz (pág. 2): "Deliverable (by December 9th, 23:59): 2-page
+report". O prazo é 9 de dezembro, 23:59. Não há "dia 28" em lado nenhum.
+(A menos que o professor tenha dito outra coisa nas aulas; não temos isso
+escrito.)
+
+--------------------------------------------------------------------------
+1. SECÇÃO "O que NÃO deves mudar"                                 -> CERTO
+--------------------------------------------------------------------------
+Elogios corretos (D13 varcoef, Little no peak.c, Sattolo, triad com repetições,
+diagnóstico dos 2 runtimes OpenMP). Nada a fazer.
+
+--------------------------------------------------------------------------
+2. TABELA "os resultados estão normais?"                          -> CERTO
+--------------------------------------------------------------------------
+Os números citados batem com os nossos (1.18 ns x 3.38 GHz = 4 ciclos;
+27.6 ns x 1.41 GHz = 39 ciclos; M2 22.6/87.7; SGEMM 4.5-5.6 TF, etc.).
+
+2.1 Latência A64FX 144 -> 221 ns (TLB)                           -> CERTO
+    Prova: res-arm-2253872/latency.csv: 144.5 ns até 64 MiB (67108608 B ->
+    145.20), depois sobe sempre até 221.13 ns a 2 GiB. O AMD fica em
+    105-107 ns (res-x86-2253871/latency.csv).
+    A explicação (alcance da TLB: 1024 entradas x 64 KiB = 64 MiB) é a MESMA
+    que o nosso relatório já dá para o "joelho" dos 64 MiB (linha 71).
+    O que falta é tirar a consequência: a Tabela I diz "144 ns" de latência
+    de memória, mas para um dataset > 1 GiB com acessos aleatórios o A64FX
+    vê ~221 ns. Vale meia frase.
+    Ressalva: "x86 tem THP=always" NÃO está nos nossos info-*.txt (não
+    registámos isso). É uma explicação plausível para o AMD ficar estável,
+    mas não está provada.
+
+2.2 L2 do A64FX: 2680 GB/s "= 87% de 4096"                       -> PARCIAL
+    Certo: o triad.c conta 3 x 4 B = 12 B por elemento (linha
+    "bytes = 3.0 * sizeof(float) ...") e usa stores normais, logo com
+    write-allocate movem-se 16 B: 2680 x 16/12 = 3573 GB/s. A Tabela I não
+    diz que a banda da LLC está contada assim (o mesmo vale para os 5036 GB/s
+    do AMD). Uma nota de rodapé resolve.
+    Não verificável: o "pico teórico da L2 = 4096 GB/s (1024/CMG)" não está
+    em nenhum dos nossos ficheiros (o 1024 GB/s do valores_teoricos.txt é a
+    HBM, não a L2). Não usar esse 87% sem fonte do manual.
+
+2.3 STREAM no AMD e "spread dá mais banda"                       -> PARCIAL
+    Os números são reais (res-x86-2253871/stream.txt, Copy): 16 thr 39.7,
+    32 thr 78.7, 64 thr 154.7, 128 thr 297.9 GB/s. 39.7 x 8 = 317.8, logo
+    128 threads ficam 6.3% abaixo da extrapolação. Certo.
+    Mas "spread com 32/64 threads dá MAIS banda do que 128" é uma hipótese,
+    não um resultado: os nossos dados mostram escala quase linear com close.
+    É uma boa ideia de teste para o T4 da Task 2, não um erro do relatório.
+
+--------------------------------------------------------------------------
+CRÍTICO 1. n = 14 na L1 do A64FX "cai no critical stride"        -> ERRADO
+--------------------------------------------------------------------------
+A conta está certa, a conclusão não.
+  - Certo: n+2 = 16, cada array tem 16^3 x 4 B = 16 KiB; a L1d do A64FX tem
+    64 KiB, 4 vias, linha de 256 B -> 64 conjuntos (sets); uma "via" inteira
+    = 64 x 256 B = 16 KiB.
+  - Errado: isso NÃO dá conflitos severos. Um array contíguo de 16 KiB passa
+    exatamente UMA vez por cada um dos 64 sets. Os 3 arrays (u, u_new,
+    material) põem 3 linhas em cada set, e cada set tem 4 vias. Cabe tudo,
+    com 1 via livre em todos os sets (é por isso que 48 KiB cabem em 64).
+    O "aliasing" só faz mal quando há MAIS endereços a cair no mesmo set do
+    que vias (ex.: 5+ arrays com stride potência de 2, ou n+2 = 512 na RAM,
+    onde muitos planos caem nos mesmos sets).
+  - Os vizinhos i±1 estão a 1 plano = 16x16x4 B = 1 KiB de distância: caem
+    em sets DIFERENTES (1 KiB / 256 B = 4 sets ao lado), não competem.
+  - Detalhe real: no código do professor (varcoef/grid.cpp) os 3 arrays são
+    malloc separados, não alinhados a 256 B. Então cada array ocupa 65 linhas
+    e UM dos 64 sets pode receber 2 linhas de cada array (6 > 4 vias). Isso
+    afeta ~1/64 das linhas: desprezável.
+  - n = 13 não traz vantagem: com 13.2 KiB por array a distribuição é menos
+    uniforme, não mais.
+Opinião: manter n = 14. Se quisermos, a meia frase do relatório pode até
+virar argumento a favor: "with n+2 = 16 each array is exactly one 16 KiB
+way, so the three arrays fill 3 of the 4 ways evenly".
+
+--------------------------------------------------------------------------
+CRÍTICO 2. A100 na 1.1 e título da Tabela I
+--------------------------------------------------------------------------
+2.1 O enunciado pede CPU e GPU de cada partição                 -> CERTO
+    Texto do enunciado 1.1 confere. A nossa coluna A100 só tem a GPU.
+2.2 "Per node" mas a A100 é por GPU; nó GPU = 4 A100 + 2 EPYC  -> CERTO
+    Prova: info-dev-a100-40-2253352.txt: Gres=gpu:a100:4, 2 sockets
+    "AMD EPYC 7742 64-Core", 8 nós NUMA, MemTotal 528176460 kB (~504 GiB
+    visíveis, 512 GiB instalados é provável). info-gpu-2253352.txt
+    (nvidia-smi topo): GPU0 com afinidade ao nó NUMA 2 -> certo.
+    valores_teoricos.txt já tem "PCIe 4.0 x16 [CONFIRMADO]".
+    NÃO verificável: "Atos BullSequana XH2000 / Gigabyte G492-ZD2" e
+    "NVLink 600 GB/s entre as 4 GPUs": o nosso job só viu 1 GPU e o
+    /sys/class/dmi do nó GPU continua por ler (pendente desde a revisão).
+    Não escrever esses nomes sem confirmar.
+2.3 Falta a banda da LLC da A100 (L2)                           -> CERTO
+    A Tabela I tem "--; --" na A100. O enunciado 1.1(iii) pede "memory access
+    bandwidth (from the LLC on chip)". É a lacuna mais "objetiva" do
+    relatório face ao enunciado. Precisa de um job GPU curto. O valor
+    esperado "4.5-5.0 TB/s" é uma estimativa deles, não um dado.
+2.4 Linha de cache, associatividade, FP64, 40 GB vs GiB         -> PARCIAL
+    É verdade que faltam, e a nota do FP64 é útil porque a referência calcula
+    em double (jacobi.cpp: harmonic_mean e num/den em double). As contas FP64
+    estão certas: 128 x 16 x 2.25 = 4608 GFLOP/s; 3072; 9.7 TF (A100).
+    Mas são 2 páginas: escolher. Linha de cache (64/256/128 B) é a mais
+    importante, porque o relatório usa-a (M1 = 1/16 e 1/64 da linha).
+    40 GB -> 40 GiB é cosmético.
+
+--------------------------------------------------------------------------
+CRÍTICO 3. Secção III contradiz a Secção IV                       -> CERTO
+--------------------------------------------------------------------------
+Contas: 3.75 x 224 = 840 GF = 0.84 TF; 3.75 x 606 = 2272 = 2.3 TF (isto é o
+M3, com write-allocate). Com o M4 do gráfico: 3.75 x 299 = 1.12 TF e
+3.75 x 813 = 3.05 TF. O texto (linhas 81-86) diz que o gráfico usa o M4 e
+logo a seguir dá números do M3 sem dizer. Quem lê o gráfico vê ~1.1 e ~3.0.
+E sobretudo: a linha 85 diz que a E1 no A64FX é "memory bound at 2.3 TFLOP/s",
+mas a linha 121-122 diz que a mesma E1 fica limitada pelas divisões a
+2.2 Gpontos/s = 2.2 x 45 = 99 GFLOP/s, 23x abaixo. É uma contradição real.
+(Já tinha aparecido na nossa revisão, B1/B2, e não ficou totalmente limpa.)
+É a correção mais importante do relatório: uma frase.
+
+--------------------------------------------------------------------------
+CRÍTICO 4. Tetos
+--------------------------------------------------------------------------
+4.1 Rótulo do C2 "no harmonic divisions (E2)"                   -> CERTO
+    C2 = 8.0 GF no A64FX = 4 FLOP/ciclo a 2 GHz = 2 FMA escalares, sem
+    nenhuma divisão. Mas a E2 ainda tem 1 divisão final, e o próprio texto
+    (linhas 124-126) diz que no A64FX a E2 fica limitada por ela. Contas do
+    check-up conferem: 2 GHz / 29 ciclos = 69 M div/s. O rótulo deve dizer
+    "division-free" (ex.: "no divisions: pair table + reciprocal").
+4.2 Explicar porque o OpenMP (C3) vem antes do SIMD (C4)        -> PARCIAL
+    É boa ideia dar a razão (a 1.3 pede "order these ceilings"): no varcoef
+    o acesso materials[material[p]] é indireto (gather), o que dificulta a
+    vetorização automática; o OpenMP aplica-se logo. Mas "Williams diz que o
+    compilador vetoriza antes" é uma leitura livre do artigo: a ordem dos
+    tetos no artigo depende da máquina e do código. Meia frase, opcional.
+4.3 Mistura MUL/ADD real da E2                                   -> PARCIAL
+    Zen 2 tem de facto 2 pipes MUL/FMA + 2 pipes ADD. Mas o "6 MUL : 11 ADD"
+    da E2 é uma estimativa deles; a E2 ainda não existe em código. Matéria
+    para a Task 2, não para este relatório.
+4.4 M1 é "derivado", e é um limite otimista                      -> CERTO
+    A legenda da Tabela II diz "measured", mas M1 e o M4 do AMD são
+    calculados (a própria nota de rodapé o mostra). Trocar para
+    "measured; M1 and AMD M4 derived". O argumento de que saltos de 1 plano
+    (522 x 522 x 4 B = 1.09 MB em n=520) estragam prefetch/TLB está certo.
+4.5 VMOVNTPS (x86) vs DC ZVA (ARM)                               -> CERTO
+    Correto e útil, mas é para a Task 2 (o relatório não tem espaço).
+
+--------------------------------------------------------------------------
+CRÍTICO 5. Metodologia 1.4
+--------------------------------------------------------------------------
+5.1 Amdahl não aparece no relatório                              -> CERTO
+    grep "Amdahl" relatorio_task1.tex = 0. O enunciado (Context) pede
+    explicitamente Amdahl em multicore heterogéneo + Gustafson. O nosso
+    protocolo_testes_1.4.txt (linha 38) já fala de Karp-Flatt vs Amdahl, mas
+    isso não passou para o relatório; Gustafson já está no T3.
+    Correção barata: "Amdahl/Karp-Flatt" no T2 e Hill & Marty (2008) como
+    referência para a comparação CPU+GPU.
+5.2 Falta tamanho LLC para a A100                                -> CERTO,
+    com contas erradas
+    Task 2.5: "Measure its performance for the 2 dataset sizes". A L2 da A100
+    tem 40 MiB, o n=250 do AMD (183 MiB) não cabe. Mas as contas deles: n=126
+    -> (128)^3 x 12 B = 24.0 MiB (não 23.6); 9 B -> 18.0 MiB (não 17.7).
+    E atenção: a L2 da A100 são 2 metades de 20 MiB (nós medimos a "far" ao
+    dobro da latência) e os dados podem ficar duplicados nas duas; usar o
+    n = 110 (16 MiB) é mais seguro do que 24 MiB. Isto é uma hipótese minha,
+    a confirmar com a medição da L2.
+5.3 OpenMP vs MPI+OpenMP                                         -> PARCIAL
+    Certo: a Task 2.2 diz "OpenMP or MPI+OpenMP (if it makes sense given the
+    architecture)" e não há nenhuma decisão sobre MPI no decisoes.txt. Com
+    8 nós NUMA (AMD) e 4 CMG (A64FX) há argumento para testar MPI+OpenMP.
+    Merece uma decisão e meia linha no T4.
+    Errado: "o tamanho LLC-node com material uint8 tem 15.3 MiB no total".
+    15.3 MiB = 252^3 x 1 B é só o array material; o total com uint8 é
+    252^3 x 9 B = 137 MiB. O argumento das hugepages fica muito mais fraco.
+5.4 fapp/ncu, domínio da energia, resíduo                        -> CERTO
+    - fapp no ARM e nsys/ncu na GPU continuam por confirmar (revisao C8,
+      job 2255721). Já sabíamos.
+    - Dizer o que cada medição de energia inclui (RAPL pacote vs fapp vs
+      NVML só GPU) é boa prática; meia frase.
+    - Resíduo: confirmado no README do professor (secção Rules): "The -t
+      option must keep working. You may evaluate it less often than every
+      iteration if you state how often in the report". Sem -t, o tol é 0
+      (common.cpp) e só o resíduo final importa. Boa ideia para o T7 (está
+      no README, não sei se também no slide 16).
+
+--------------------------------------------------------------------------
+MELHORIA 6. Figura e limpeza
+--------------------------------------------------------------------------
+Figura: subjetivo. O XMAX = 64 está em roofline.py (linha 24); as diagonais
+baixas cortadas na borda são normais num roofline. Opcional.
+Limpeza                                                           -> CERTO
+  - A pasta task1/mei.2026.pg65437@login.deucalion.macc.fccn.pt/ existe no PC
+    (4 scripts info_*.sh de 20/11, cópia acidental de um scp sem ":").
+  - scripts/info_*.sh ainda têm CHANGE_ME_x/a/g.
+  - valores_teoricos.txt linha 15 diz "128 threads (SMT2)" e linha 107 fala
+    do box27. Nada disto vai para o relatório; é só arrumação.
+
+--------------------------------------------------------------------------
+RESUMO: o que vale a pena mudar, por prioridade
+--------------------------------------------------------------------------
+ALTA (texto, sem novos jobs):
+  A1. Secção III: alinhar com a Secção IV (dizer M3 vs M4 e que no A64FX as
+      divisões derrubam a previsão do roofline simples).        [Crítico 3]
+  A2. Tabela I: título "per node (CPU) / per GPU (A100)" e o host do nó GPU
+      (2x EPYC 7742, 4x A100, ~512 GiB, PCIe 4.0 x16).          [Crítico 2.2]
+  A3. Amdahl/Karp-Flatt no T2 + Hill & Marty nas referências.  [Crítico 5.1]
+  A4. Tamanho LLC para a A100 (n = 110, 16 MiB) na parte Sizes. [Crítico 5.2]
+  A5. Rótulo do C2 "division-free"; legenda Tabela II "M1 and AMD M4
+      derived".                                                 [4.1, 4.4]
+MÉDIA (precisa de 1 job GPU curto):
+  M1. Medir a banda da L2 da A100 (preenche o "--" da 1.1(iii)) e ler o
+      modelo do nó GPU (/sys/class/dmi) + nvidia-smi topo com as 4 GPUs.
+BAIXA (se houver espaço): latência 221 ns a 2 GiB no A64FX; nota "LLC BW
+  counts 12 B/elem"; linha de cache na Tabela I; nota FP64; ordem C3<C4;
+  decisão MPI+OpenMP para a Task 2; limpeza da pasta.
+NÃO MUDAR: n = 14 no A64FX (Crítico 1 está errado).

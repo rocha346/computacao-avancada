@@ -1,0 +1,23 @@
+>> banda da L2 (triad .cg, 3 a 96 MiB no total + 384/1536 MiB de controlo)
+== L2: mediana GB/s por tamanho total (MiB)
+     3 MiB:   2009.2 GB/s  (10 reps)
+     6 MiB:   2233.4 GB/s  (10 reps)
+    12 MiB:   2378.6 GB/s  (10 reps)
+    18 MiB:   2377.1 GB/s  (10 reps)
+    24 MiB:   3071.2 GB/s  (10 reps)
+    30 MiB:   2683.8 GB/s  (10 reps)
+    36 MiB:   2284.5 GB/s  (10 reps)
+    48 MiB:   1363.7 GB/s  (10 reps)
+    96 MiB:   1306.1 GB/s  (10 reps)
+   384 MiB:   1247.9 GB/s  (10 reps)
+  1536 MiB:   1245.6 GB/s  (10 reps)
+== controlo HBM (1536 MiB): 1245.6 GB/s (tem de ser <= 1555)
+== clock do SM durante a medicao (MHz, min/max)
+210 / 1410
+== modelo do no
+sys_vendor       Bull SAS
+product_name     G262-ZR0-00
+board_name       MZ62-HD5-00
+== NVLink (linhas com GB/s = ligacoes ativas)
+12
+RESUMO: 0 FALHOU   (resultados em res-gpu-l2-2270004/)

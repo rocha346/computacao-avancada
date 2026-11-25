@@ -1,0 +1,5 @@
+Fonte do enunciado_explicado.pdf (21/11/2026)
+- enunciado_explicado.html: texto (com marcadores {{...}} para as figuras)
+- build.py + roof.py: geram as figuras SVG e out.html (caminhos /tmp/claude-0/enun/ no build.py)
+- pdf.js: imprime out.html para PDF com Playwright/Chromium (node pdf.js)
+- solucao_varcoef_slide2.png: figura do slide 2 do professor (usada na Figura 3)

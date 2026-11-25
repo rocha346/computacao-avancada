@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<title>Enunciado explicado — WA2</title>
+<style>
+@page { size: A4; margin: 18mm 17mm 18mm 17mm; }
+body { font-family: "DejaVu Serif", Georgia, serif; font-size: 10.6pt; line-height: 1.5; color: #1d1d22; }
+h1 { font-family: "DejaVu Sans", sans-serif; font-size: 22pt; margin: 0 0 4px 0; color: #12325c; }
+h2 { font-family: "DejaVu Sans", sans-serif; font-size: 14.5pt; color: #12325c; border-bottom: 2px solid #12325c; padding-bottom: 3px; margin-top: 26px; page-break-after: avoid; }
+h3 { font-family: "DejaVu Sans", sans-serif; font-size: 11.5pt; color: #24456f; margin: 16px 0 4px 0; page-break-after: avoid; }
+p { margin: 5px 0 8px 0; text-align: justify; }
+.sub { font-family: "DejaVu Sans", sans-serif; color: #555; font-size: 10.5pt; }
+.box { border-left: 5px solid; padding: 7px 11px; margin: 10px 0; border-radius: 3px; page-break-inside: avoid; }
+.box b.t { font-family: "DejaVu Sans", sans-serif; font-size: 9.2pt; letter-spacing: .3px; text-transform: uppercase; display: block; margin-bottom: 2px; }
+.enun { background: #eef4fb; border-color: #1f6fb2; }
+.enun b.t { color: #1f6fb2; }
+.interp { background: #fff7e6; border-color: #e69500; }
+.interp b.t { color: #b07000; }
+.atencao { background: #fdeeee; border-color: #c0392b; }
+.atencao b.t { color: #c0392b; }
+.analog { background: #edf7ee; border-color: #2e7d32; }
+.analog b.t { color: #2e7d32; }
+.enun i.q { font-family: "DejaVu Sans", sans-serif; font-size: 9.6pt; }
+figure { margin: 12px 0; text-align: center; page-break-inside: avoid; }
+figcaption { font-size: 9.3pt; color: #444; margin-top: 4px; font-family: "DejaVu Sans", sans-serif; }
+table { border-collapse: collapse; margin: 8px auto; font-size: 9.6pt; page-break-inside: avoid; }
+th, td { border: 1px solid #b9c2cf; padding: 4px 7px; text-align: left; vertical-align: top; }
+th { background: #e6ecf4; font-family: "DejaVu Sans", sans-serif; }
+code, .mono { font-family: "DejaVu Sans Mono", monospace; font-size: 9.2pt; background: #f2f2f5; padding: 0 2px; }
+pre { font-family: "DejaVu Sans Mono", monospace; font-size: 8.8pt; background: #f4f5f8; border: 1px solid #dde; padding: 8px 10px; line-height: 1.35; page-break-inside: avoid; white-space: pre-wrap; }
+math { font-size: 1.08em; }
+math[display="block"] { margin: 8px 0; }
+.legend span { display: inline-block; margin: 2px 10px 2px 0; font-family: "DejaVu Sans", sans-serif; font-size: 9.5pt; }
+.sw { display:inline-block; width: 12px; height: 12px; vertical-align: -1px; margin-right: 4px; border-left: 5px solid; }
+.toc { columns: 2; font-family: "DejaVu Sans", sans-serif; font-size: 9.8pt; }
+.toc div { margin: 1px 0; }
+.pb { page-break-before: always; }
+ul, ol { margin: 4px 0 8px 0; padding-left: 22px; }
+li { margin: 2px 0; }
+.small { font-size: 9.3pt; }
+</style>
+</head>
+<body>
+
+<h1>O enunciado do WA2, explicado</h1>
+<div class="sub">Work Assignment 2 de Computação Avançada (ACA) · Método de Jacobi 3D, variante <b>varcoef</b> · Rodrigo Rocha (PG65437) e André Santos (PG65399) · versão de 21/11/2026</div>
+
+<p style="margin-top:14px">Este documento serve para uma coisa só: <b>perceber muito bem o que o enunciado pede</b>. Explica o problema (o que é o Jacobi 3D e o que significa a variante varcoef), como funciona, como o código está organizado e o que cada alínea das Tasks 1, 2 e 3 quer de nós, com desenhos. Não repete o <span class="mono">guia_principiante.pdf</span> (o básico, com analogias e glossário) nem o <span class="mono">decisoes_explicadas.pdf</span> (as escolhas concretas que já fizemos). Aqui o foco é o <i>texto do enunciado</i> e dos slides do professor.</p>
+
+<p>As fontes são duas: o enunciado (<span class="mono">work-assigment/Work Assignment 2(1).pdf</span>) e os slides <span class="mono">WA2_Jacobi_slides.pptx</span>. Para não confundir o que é obrigação com o que é leitura nossa, o texto usa quatro tipos de caixa:</p>
+
+<div class="legend">
+<span><span class="sw" style="border-color:#1f6fb2;background:#eef4fb"></span><b>O enunciado diz</b>: citação ou paráfrase fiel do enunciado/slides</span><br>
+<span><span class="sw" style="border-color:#e69500;background:#fff7e6"></span><b>Interpretação nossa</b>: o enunciado não diz isto explicitamente</span><br>
+<span><span class="sw" style="border-color:#c0392b;background:#fdeeee"></span><b>Atenção</b>: ambiguidade, contradição ou armadilha</span><br>
+<span><span class="sw" style="border-color:#2e7d32;background:#edf7ee"></span><b>Para perceber</b>: analogia ou exemplo numérico</span>
+</div>
+
+<h3>Índice</h3>
+<div class="toc">
+<div>1. O trabalho num relance</div>
+<div>2. O que o professor quer mesmo (o «Context»)</div>
+<div>3. O problema físico: calor num compósito</div>
+<div>4. Da equação à grelha 3D</div>
+<div>5. O stencil de 7 pontos e a média harmónica</div>
+<div>6. A iteração de Jacobi</div>
+<div>7. Paralelismo e dependências</div>
+<div>8. O código de referência</div>
+<div>9. Contas e bytes por ponto: a intensidade</div>
+<div>10. O roofline e onde o Jacobi cai</div>
+<div>11. Regras: o que se pode e não se pode mudar</div>
+<div>12. Task 1, alínea a alínea</div>
+<div>13. Task 2, alínea a alínea</div>
+<div>14. Task 3: relatório final e apresentação</div>
+<div>15. Pontos ambíguos a confirmar com o professor</div>
+<div>16. Resumo numa página</div>
+</div>
+
+<!-- ============================================================ -->
+<h2>1. O trabalho num relance</h2>
+
+<p>O WA2 tem <b>três tasks</b> e <b>três entregas</b>. A Task 1 é sobre <i>as máquinas</i>; a Task 2 é sobre <i>o programa</i> (o Jacobi 3D) a correr nessas máquinas; a Task 3 é <i>escrever e apresentar</i> a Task 2.</p>
+
+<figure>
+<svg viewBox="0 0 680 190" width="100%" font-family="DejaVu Sans, sans-serif">
+  <defs><marker id="a1" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#333"/></marker></defs>
+  <line x1="30" y1="110" x2="660" y2="110" stroke="#333" stroke-width="2" marker-end="url(#a1)"/>
+  <!-- escala: 21 nov = x 60 ; 6 jan = x 600 ; 46 dias -> 11.74 px/dia -->
+  <g font-size="11" text-anchor="middle">
+    <line x1="60" y1="104" x2="60" y2="116" stroke="#333" stroke-width="2"/><text x="60" y="132">21 nov</text><text x="60" y="146" fill="#2e7d32">(hoje)</text>
+    <line x1="270" y1="104" x2="270" y2="116" stroke="#333" stroke-width="2"/><text x="270" y="132">9 dez, 23:59</text>
+    <line x1="389" y1="104" x2="389" y2="116" stroke="#999"/><text x="389" y="132" fill="#777">1 jan</text>
+    <line x1="600" y1="104" x2="600" y2="116" stroke="#333" stroke-width="2"/><text x="600" y="132">6 jan, 23:59</text>
+  </g>
+  <rect x="30" y="58" width="240" height="40" rx="6" fill="#dce9f7" stroke="#1f6fb2"/>
+  <text x="150" y="74" font-size="12" text-anchor="middle" font-weight="bold" fill="#12325c">Task 1 — caracterizar as máquinas</text>
+  <text x="150" y="90" font-size="10.5" text-anchor="middle" fill="#12325c">entrega: relatório de 2 páginas (1.1–1.4)</text>
+  <rect x="200" y="12" width="400" height="40" rx="6" fill="#fde6cc" stroke="#e69500"/>
+  <text x="400" y="28" font-size="12" text-anchor="middle" font-weight="bold" fill="#7a4a00">Task 2 — otimizar e analisar o Jacobi 3D</text>
+  <text x="400" y="44" font-size="10.5" text-anchor="middle" fill="#7a4a00">pode começar já (código, medições, otimizações)</text>
+  <rect x="440" y="58" width="160" height="40" rx="6" fill="#e2f1e3" stroke="#2e7d32"/>
+  <text x="520" y="74" font-size="12" text-anchor="middle" font-weight="bold" fill="#1b5e20">Task 3 — escrever</text>
+  <text x="520" y="90" font-size="10.5" text-anchor="middle" fill="#1b5e20">ensaio IEEE ≤ 5 páginas</text>
+  <rect x="470" y="150" width="190" height="34" rx="6" fill="#f3e5f5" stroke="#7b1fa2"/>
+  <text x="565" y="165" font-size="11.5" text-anchor="middle" font-weight="bold" fill="#4a148c">Apresentação oral 10 min</text>
+  <text x="565" y="179" font-size="10" text-anchor="middle" fill="#4a148c">+ discussão · data a anunciar</text>
+</svg>
+<figcaption>Figura 1. Calendário. A Task 2 não precisa de esperar pela entrega da Task 1: as medições da Task 1 já estão feitas.</figcaption>
+</figure>
+
+<table>
+<tr><th>Entrega</th><th>Conteúdo</th><th>Formato</th><th>Prazo</th></tr>
+<tr><td>Relatório da Task 1</td><td>Alíneas 1.1 a 1.4: máquinas, rooflines, tetos, protocolo de testes</td><td>2 páginas, «same template as in Task 3» (IEEE duas colunas)</td><td>9 de dezembro, 23:59</td></tr>
+<tr><td>Ensaio final (Task 3)</td><td>Só a Task 2: otimização, rooflines, GPU, profiling, comparação de arquiteturas e energia</td><td>Inglês, IEEE duas colunas, ≤ 5 páginas <i>incluindo anexos</i></td><td>6 de janeiro, 23:59, no Blackboard</td></tr>
+<tr><td>Apresentação</td><td>Resultados da Task 2</td><td>10 minutos + discussão</td><td>a anunciar (slides)</td></tr>
+</table>
+
+<p>A figura seguinte mostra <b>como as alíneas se alimentam umas às outras</b>. Vale a pena olhar com calma: muita coisa da Task 1 só faz sentido porque vai ser usada na Task 2.</p>
+
+<figure>
+<svg viewBox="0 0 680 300" width="100%" font-family="DejaVu Sans, sans-serif" font-size="10.5">
+  <defs><marker id="a2" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 z" fill="#555"/></marker></defs>
+  <g stroke="#1f6fb2" fill="#eef4fb">
+    <rect x="10" y="20" width="150" height="42" rx="5"/><rect x="10" y="80" width="150" height="42" rx="5"/>
+    <rect x="10" y="140" width="150" height="42" rx="5"/><rect x="10" y="200" width="150" height="54" rx="5"/>
+  </g>
+  <g text-anchor="middle" fill="#12325c">
+    <text x="85" y="37" font-weight="bold">1.1 Hardware</text><text x="85" y="52">cores, picos, caches, banda</text>
+    <text x="85" y="97" font-weight="bold">1.2 Roofline FP32</text><text x="85" y="112">AMD 7742 + A64FX, 1 gráfico</text>
+    <text x="85" y="157" font-weight="bold">1.3 Tetos (ceilings)</text><text x="85" y="172">justificados pelo algoritmo</text>
+    <text x="85" y="217" font-weight="bold">1.4 Protocolo de testes</text><text x="85" y="232">testes, métricas, profilers,</text><text x="85" y="246">tamanhos L1 / LLC / RAM</text>
+  </g>
+  <g stroke="#e69500" fill="#fff7e6">
+    <rect x="250" y="10" width="190" height="36" rx="5"/><rect x="250" y="56" width="190" height="36" rx="5"/>
+    <rect x="250" y="102" width="190" height="36" rx="5"/><rect x="250" y="148" width="190" height="36" rx="5"/>
+    <rect x="250" y="194" width="190" height="36" rx="5"/><rect x="250" y="240" width="190" height="36" rx="5"/>
+  </g>
+  <g text-anchor="middle" fill="#7a4a00">
+    <text x="345" y="25" font-weight="bold">2.2 Otimizar o Jacobi (CPU)</text><text x="345" y="39">vetorizar, localidade, OpenMP/MPI</text>
+    <text x="345" y="71" font-weight="bold">2.3 Dois tamanhos</text><text x="345" y="85">LLC e RAM (&gt; 1 GiB) + validar</text>
+    <text x="345" y="117" font-weight="bold">2.1 Tabelas de medições</text><text x="345" y="131">de cada versão incremental</text>
+    <text x="345" y="163" font-weight="bold">2.4 OI e GFLOP/s no roofline</text><text x="345" y="177">referência vs. melhor versão</text>
+    <text x="345" y="209" font-weight="bold">2.5 GPU (CUDA ou SYCL)</text><text x="345" y="223">e medir nos 2 tamanhos</text>
+    <text x="345" y="255" font-weight="bold">2.6 Profiling · 2.7 Comparar</text><text x="345" y="269">limites, arquiteturas, energia</text>
+  </g>
+  <g stroke="#2e7d32" fill="#edf7ee">
+    <rect x="530" y="100" width="140" height="60" rx="5"/><rect x="530" y="190" width="140" height="44" rx="5"/>
+  </g>
+  <g text-anchor="middle" fill="#1b5e20">
+    <text x="600" y="120" font-weight="bold">Task 3</text><text x="600" y="135">ensaio IEEE ≤ 5 pág.</text><text x="600" y="150">(só Task 2)</text>
+    <text x="600" y="209" font-weight="bold">Apresentação</text><text x="600" y="224">10 min</text>
+  </g>
+  <g stroke="#555" stroke-width="1.4" fill="none" marker-end="url(#a2)">
+    <path d="M160,101 C210,101 210,163 248,163"/>
+    <path d="M160,161 C210,161 210,166 248,166"/>
+    <path d="M160,222 C205,222 205,74 248,74"/>
+    <path d="M160,232 C210,232 210,120 248,120"/>
+    <path d="M160,242 C215,242 215,258 248,258"/>
+    <path d="M440,120 C490,120 490,128 528,128"/>
+    <path d="M440,166 C490,166 490,138 528,138"/>
+    <path d="M440,258 C490,258 490,150 528,150"/>
+    <path d="M600,160 L600,188"/>
+  </g>
+  <text x="196" y="292" font-size="9.5" fill="#555">setas: «a alínea da esquerda é usada pela da direita»</text>
+</svg>
+<figcaption>Figura 2. Mapa das alíneas. O roofline e os tetos (1.2, 1.3) recebem os pontos do Jacobi na 2.4; o protocolo (1.4) define os tamanhos (2.3), as tabelas (2.1) e o profiling (2.6); as tabelas da 2.1 são a base dos gráficos do ensaio (o enunciado diz «These tables should serve as the basis for the plots presented in Task 3»).</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2>2. O que o professor quer mesmo (o «Context»)</h2>
+
+<div class="box enun"><b class="t">O enunciado diz</b>
+O objetivo principal é desenvolver competências transversais sobre <i class="q">«the methodology for characterising performance bottlenecks on a computing platform and/or code profiling and its performance analysis on that platform»</i>, treinando pesquisa bibliográfica, leitura de artigos científicos, planeamento de trabalho experimental, síntese, escrita de um ensaio curto e uma comunicação oral de 10 minutos.</div>
+
+<p>Traduzindo: o WA2 <b>não é um concurso de velocidade</b>. É um exercício de <i>método</i>: medir bem uma máquina, prever o que um programa deve conseguir nela, medir o que consegue de facto, e explicar a diferença. O enunciado repete isto na Task 2.2 («these optimisations are important to this WA grade, but analysing the algorithm's behaviour on different hardware is more important») e os slides também («Analysing the behaviour on each architecture matters more than the last percent of speed-up»).</p>
+
+<h3>Leituras pedidas</h3>
+<div class="box enun"><b class="t">O enunciado diz</b>
+Começar por ler a documentação do modelo <b>Roofline</b> (já fornecida), a <b>lei de Amdahl aplicada a plataformas multicore heterogéneas</b> e a respetiva <b>extensão de Gustafson</b>. Recomenda usar Intel VTune, Intel Advisor, Nvidia Nsight (nsys), contadores de desempenho (perf) ou outros profilers disponíveis no Deucalion.</div>
+
+<p><b>Amdahl</b> responde a: «se só uma fração <i>f</i> do programa é paralela, quanto ganho com <i>N</i> cores, mantendo o problema do mesmo tamanho?» (escalabilidade <i>forte</i>). <b>Gustafson</b> responde a: «se eu aumentar o problema ao mesmo ritmo que os cores, quanto trabalho a mais faço no mesmo tempo?» (escalabilidade <i>fraca</i>).</p>
+
+<math display="block"><mrow><msub><mi>S</mi><mtext>Amdahl</mtext></msub><mo>=</mo><mfrac><mn>1</mn><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mi>f</mi><mo>)</mo><mo>+</mo><mfrac><mi>f</mi><mi>N</mi></mfrac></mrow></mfrac><mspace width="3em"/><msub><mi>S</mi><mtext>Gustafson</mtext></msub><mo>=</mo><mo>(</mo><mn>1</mn><mo>−</mo><mi>f</mi><mo>)</mo><mo>+</mo><mi>f</mi><mspace width="0.2em"/><mi>N</mi></mrow></math>
+
+<div class="box interp"><b class="t">Interpretação nossa</b>
+A versão «heterogénea» da lei de Amdahl é normalmente a de Hill e Marty (<i>Amdahl's Law in the Multicore Era</i>, IEEE Computer, 2008), que considera chips com cores de tamanhos diferentes. É a referência natural a citar. No nosso trabalho ela aparece quando compararmos CPU e GPU, ou CPU+GPU em simultâneo (SYCL). O enunciado não diz <i>onde</i> usar Amdahl/Gustafson; o sítio natural é a análise de escalabilidade (testes de strong/weak scaling do protocolo 1.4) e a discussão da 2.7.</div>
+
+<div class="box atencao"><b class="t">Atenção</b>
+VTune e Advisor são da Intel e as máquinas do Deucalion são AMD, Fujitsu e NVIDIA. Já confirmámos que o Advisor (e o uProf da AMD) <b>não existem</b> no Deucalion; existem <span class="mono">perf</span>, PAPI, fapp/fipp no ARM e nsys/ncu na GPU. O enunciado diz «or other profilers available at Deucalion», portanto usar outros está dentro das regras, desde que <b>justifiquemos a escolha</b> (a 1.4 pede isso).</div>
+
+<div class="box enun"><b class="t">O enunciado diz</b>
+«This work should be performed by a 3-student team». O código base está em <span class="mono">github.com/ampereira90/WA2-2026</span> (e no Deucalion em <span class="mono">/projects/F202500010HPCVLABUMINHO/ACA/WA2</span>, segundo as notas dos slides).</div>
+<p class="small">Nós somos dois. Se isto ainda não foi falado com o professor, convém confirmar que não muda a avaliação.</p>
+
+<!-- ============================================================ -->
+<h2>3. O problema físico: calor num compósito</h2>
+
+<p>Os slides apresentam três variantes do mesmo algoritmo (poisson7, box27, varcoef). A Task 2.2 manda escolher <b>box27 ou varcoef</b>; nós escolhemos <b>varcoef</b> (decisão D13, porque o professor avisou que o box27 é mais fácil e seria avaliado com mais exigência). Daqui para a frente só falamos do varcoef, com comparações pontuais.</p>
+
+<div class="box enun"><b class="t">Os slides dizem (slide 10)</b>
+«Steady-state heat conduction in a composite of four materials». A equação é
+<math display="block"><mrow><mo>−</mo><mo>∇</mo><mo>·</mo><mo>(</mo><mi>κ</mi><mspace width="0.15em"/><mo>∇</mo><mi>u</mi><mo>)</mo><mo>=</mo><mi>q</mi></mrow></math>
+com <i>u</i> = 1 na face <i>x</i> = 0 e <i>u</i> = 0 nas outras faces.</div>
+
+<p><b>O que cada símbolo significa:</b></p>
+<ul>
+<li><b><i>u</i>(x, y, z)</b> é a temperatura em cada ponto do cubo (é o que queremos calcular).</li>
+<li><b><i>κ</i></b> (kappa) é a condutividade térmica: quão bem o material deixa passar o calor. Muda de material para material, por isso «<b>var</b>iable <b>coef</b>ficients».</li>
+<li><b><i>q</i></b> é a fonte de calor: só o aquecedor produz calor (<i>q</i> = 500); os outros materiais têm <i>q</i> = 0.</li>
+<li><b>∇<i>u</i></b> (gradiente) diz para onde a temperatura sobe e quão depressa. <b>−<i>κ</i>∇<i>u</i></b> é o fluxo de calor (lei de Fourier: o calor vai do quente para o frio, mais depressa se <i>κ</i> for grande). <b>∇·</b> (divergência) mede quanto fluxo <i>sai</i> de um pequeno volume.</li>
+</ul>
+<p>Lida em português, a equação diz: <b>«em equilíbrio, o calor que sai de cada pedacinho do material é igual ao calor que lá é produzido»</b>. Nos sítios sem aquecedor, entra tanto como sai. «Steady-state» quer dizer que já não há mudança no tempo: procuramos a temperatura final, quando tudo estabilizou.</p>
+
+<table>
+<tr><th>Material</th><th>κ (condutividade)</th><th>q (fonte)</th><th>Onde está (gerador de dados)</th></tr>
+<tr><td>epoxy (resina)</td><td>1.0</td><td>0</td><td>em todo o lado que sobra</td></tr>
+<tr><td>carbon (fibra de carbono)</td><td>20.0</td><td>0</td><td>camadas paralelas ao plano x–y</td></tr>
+<tr><td>air (poros de ar)</td><td>0.05</td><td>0</td><td>pequenas esferas numa rede regular</td></tr>
+<tr><td>heater (aquecedor)</td><td>5.0</td><td>500</td><td>esfera no centro</td></tr>
+</table>
+<p class="small" style="text-align:center">Tabela dos slides (slide 10). Densidade e capacidade calorífica também vêm no ficheiro, mas <b>não são usadas</b> no problema estacionário (notas do slide 10).</p>
+
+<figure>
+<img src="{{IMG_SOL}}" style="width:100%">
+<figcaption>Figura 3 (do slide 2 do professor). Solução do varcoef numa grelha 128³ após 20 000 iterações, em três cortes. A face <i>i</i> = 0 (fundo dos cortes do meio e da direita) está a <i>u</i> = 1; o aquecedor é a mancha clara ao centro; os contornos brancos são os poros de ar e as camadas de carbono.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2>4. Da equação à grelha 3D</h2>
+
+<p>O computador não sabe trabalhar com funções contínuas, por isso o cubo é <b>discretizado</b>: partido numa grelha regular de pontos com espaçamento <i>h</i>. O ponto (<i>i</i>, <i>j</i>, <i>k</i>) está em <i>x</i> = <i>ih</i>, <i>y</i> = <i>jh</i>, <i>z</i> = <i>kh</i>.</p>
+
+<div class="box enun"><b class="t">Os slides dizem (slide 3)</b>
+<ul style="margin:2px 0">
+<li>Há <i>n<sub>x</sub></i> × <i>n<sub>y</sub></i> × <i>n<sub>z</sub></i> pontos <b>interiores</b>: são as incógnitas.</li>
+<li>Há uma camada de <b>halo</b> em cada lado (índices 0 e <i>n</i>+1) que guarda os valores de fronteira (condições de Dirichlet: <i>u</i> fixo na fronteira).</li>
+<li>Cada array tem (<i>n<sub>x</sub></i>+2)(<i>n<sub>y</sub></i>+2)(<i>n<sub>z</sub></i>+2) entradas, <b>k é o índice mais rápido</b>, depois j, depois i.</li>
+<li>O gerador usa <i>h</i> = 1/(<i>n<sub>x</sub></i>+1), portanto uma grelha cúbica cobre o cubo unitário.</li>
+</ul></div>
+
+<figure>
+<svg viewBox="0 0 680 260" width="100%" font-family="DejaVu Sans, sans-serif" font-size="11">
+  <!-- cubo isometrico -->
+  <g transform="translate(40,30)">
+    <polygon points="0,60 120,0 240,60 120,120" fill="#d9d9de" stroke="#666"/>
+    <polygon points="0,60 120,120 120,230 0,170" fill="#c4c4cc" stroke="#666"/>
+    <polygon points="120,120 240,60 240,170 120,230" fill="#b0b0ba" stroke="#666"/>
+    <polygon points="30,72 120,27 210,72 120,117" fill="#ffd9a8" stroke="#c77700" stroke-dasharray="4 3" opacity="0.9"/>
+    <text x="120" y="76" text-anchor="middle" fill="#7a4a00" font-size="10.5">interior n×n×n</text>
+    <text x="120" y="90" text-anchor="middle" fill="#7a4a00" font-size="10.5">(as incógnitas)</text>
+    <text x="60" y="200" fill="#333" font-size="10.5" transform="rotate(27 60 200)">halo (fronteira)</text>
+    <g stroke="#333" stroke-width="1.5" fill="none">
+      <line x1="-10" y1="175" x2="-10" y2="205"/><line x1="-10" y1="175" x2="-34" y2="163"/><line x1="-10" y1="175" x2="14" y2="163"/>
+    </g>
+    <text x="-14" y="218" font-size="10">i (x)</text><text x="-50" y="160" font-size="10">j (y)</text><text x="18" y="160" font-size="10">k (z)</text>
+  </g>
+  <g transform="translate(360,40)" font-size="11.5" fill="#222">
+    <text x="0" y="0" font-weight="bold" fill="#12325c">Contagem para n = n<tspan baseline-shift="sub" font-size="8">x</tspan> = n<tspan baseline-shift="sub" font-size="8">y</tspan> = n<tspan baseline-shift="sub" font-size="8">z</tspan></text>
+    <text x="0" y="24">incógnitas (interior):  n³</text>
+    <text x="0" y="44">posições guardadas:     (n+2)³</text>
+    <text x="0" y="64">índices em cada eixo:   0, 1, …, n, n+1</text>
+    <text x="0" y="84">interior:               1 … n</text>
+    <text x="0" y="104">halo:                   0 e n+1</text>
+    <text x="0" y="134">espaçamento:  h = 1/(n+1)</text>
+    <text x="0" y="154">ponto (i,j,k) em (ih, jh, kh)</text>
+    <text x="0" y="184" fill="#c0392b">face i = 0 (x = 0): u = 1</text>
+    <text x="0" y="204" fill="#1f6fb2">outras 5 faces: u = 0</text>
+  </g>
+</svg>
+<figcaption>Figura 4. A grelha 3D: um cubo interior de incógnitas embrulhado numa camada de halo, e as contas de tamanhos e índices.</figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 680 250" width="100%" font-family="DejaVu Sans, sans-serif" font-size="10">
+  {{SLICE}}
+</svg>
+<figcaption>Figura 5. Corte 2D de uma grelha com n = 5: 7×7 posições guardadas, das quais 5×5 são interiores (laranja) e as 24 da borda são halo (cinzento). Na face <i>i</i> = 0 o halo vale 1 (quente) e nas outras 0. O halo existe para que <b>a mesma fórmula sirva para todos os pontos interiores</b>: um ponto encostado à fronteira também tem 6 vizinhos, só que alguns são halo.</figcaption>
+</figure>
+
+<div class="box analog"><b class="t">Para perceber: quanto ocupa uma grelha</b>
+Com <i>n</i> = 512 há 512³ ≈ 1.3·10<sup>8</sup> incógnitas (os slides usam este número). Na referência cada ponto guarda <span class="mono">u</span> (float, 4 B), <span class="mono">u_new</span> (float, 4 B) e <span class="mono">material</span> (int, 4 B): 12 B por ponto. Para <i>n</i> = 520 (o nosso tamanho «RAM», D22): 522³ × 12 B ≈ 1.59 GiB, acima do 1 GiB que o enunciado exige.</div>
+
+<!-- ============================================================ -->
+<h2>5. O stencil de 7 pontos e a média harmónica</h2>
+
+<p>Um <b>stencil</b> («estêncil», molde) é a regra «para atualizar um ponto, olha para este padrão fixo de vizinhos». No varcoef o padrão é o ponto <i>p</i> e os seus <b>6 vizinhos de face</b>: dois em <i>i</i>, dois em <i>j</i>, dois em <i>k</i>. Daí «7 pontos».</p>
+
+<figure>
+<svg viewBox="0 0 680 230" width="100%" font-family="DejaVu Sans, sans-serif" font-size="11">
+  <g transform="translate(170,115)">
+    <g stroke="#888" stroke-width="2">
+      <line x1="0" y1="0" x2="0" y2="-85"/><line x1="0" y1="0" x2="0" y2="85"/>
+      <line x1="0" y1="0" x2="-105" y2="0"/><line x1="0" y1="0" x2="105" y2="0"/>
+      <line x1="0" y1="0" x2="-58" y2="48"/><line x1="0" y1="0" x2="58" y2="-48"/>
+    </g>
+    <g fill="#1f6fb2" stroke="white" stroke-width="2">
+      <circle cx="0" cy="-85" r="12"/><circle cx="0" cy="85" r="12"/>
+      <circle cx="-105" cy="0" r="12"/><circle cx="105" cy="0" r="12"/>
+      <circle cx="-58" cy="48" r="12"/><circle cx="58" cy="-48" r="12"/>
+    </g>
+    <circle cx="0" cy="0" r="16" fill="#e67e22" stroke="white" stroke-width="2"/>
+    <text x="0" y="5" text-anchor="middle" fill="white" font-weight="bold">p</text>
+    <text x="18" y="-88">(i−1, j, k)</text><text x="18" y="94">(i+1, j, k)</text>
+    <text x="-170" y="-14">(i, j−1, k)</text><text x="88" y="-16">(i, j+1, k)</text>
+    <text x="-140" y="72">(i, j, k−1)</text><text x="72" y="-56">(i, j, k+1)</text>
+  </g>
+  <g transform="translate(400,40)" font-size="11.5">
+    <text x="0" y="0" font-weight="bold" fill="#12325c">Comparação das variantes (slide 11)</text>
+    <text x="0" y="24">poisson7: 6 vizinhos, coeficientes constantes</text>
+    <text x="0" y="44">box27: 26 vizinhos (cubo 3×3×3),</text>
+    <text x="14" y="60">pesos constantes por tipo de vizinho</text>
+    <text x="0" y="80" font-weight="bold" fill="#c77700">varcoef: 6 vizinhos, mas o peso de</text>
+    <text x="14" y="96" font-weight="bold" fill="#c77700">cada vizinho muda de ponto para ponto</text>
+    <text x="0" y="122">→ poucas contas por vizinho no poisson7;</text>
+    <text x="0" y="138">   muitos vizinhos no box27;</text>
+    <text x="0" y="154">   contas caras (divisões) e dados extra</text>
+    <text x="0" y="170">   (material) no varcoef.</text>
+  </g>
+</svg>
+<figcaption>Figura 6. O stencil de 7 pontos: o ponto <i>p</i> (laranja) e os seus 6 vizinhos de face (azul).</figcaption>
+</figure>
+
+<h3>A fórmula de atualização</h3>
+<div class="box enun"><b class="t">Os slides e o código dizem (slide 10, varcoef.h)</b>
+<math display="block"><mrow><msubsup><mi>u</mi><mi>p</mi><mrow><mo>(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo>)</mo></mrow></msubsup><mo>=</mo><mfrac><mrow><munder><mo>∑</mo><mrow><mi>q</mi><mo>∈</mo><msub><mi>N</mi><mn>6</mn></msub><mo>(</mo><mi>p</mi><mo>)</mo></mrow></munder><msub><mi>κ</mi><mrow><mi>p</mi><mi>q</mi></mrow></msub><mspace width="0.1em"/><msubsup><mi>u</mi><mi>q</mi><mrow><mo>(</mo><mi>n</mi><mo>)</mo></mrow></msubsup><mo>+</mo><msup><mi>h</mi><mn>2</mn></msup><msub><mi>q</mi><mi>p</mi></msub></mrow><mrow><munder><mo>∑</mo><mrow><mi>q</mi><mo>∈</mo><msub><mi>N</mi><mn>6</mn></msub><mo>(</mo><mi>p</mi><mo>)</mo></mrow></munder><msub><mi>κ</mi><mrow><mi>p</mi><mi>q</mi></mrow></msub></mrow></mfrac><mspace width="3em"/><msub><mi>κ</mi><mrow><mi>p</mi><mi>q</mi></mrow></msub><mo>=</mo><mfrac><mrow><mn>2</mn><mspace width="0.1em"/><msub><mi>κ</mi><mi>p</mi></msub><mspace width="0.1em"/><msub><mi>κ</mi><mi>q</mi></msub></mrow><mrow><msub><mi>κ</mi><mi>p</mi></msub><mo>+</mo><msub><mi>κ</mi><mi>q</mi></msub></mrow></mfrac></mrow></math>
+<i>κ<sub>pq</sub></i> é a condutividade na face entre a célula <i>p</i> e a vizinha <i>q</i>: a <b>média harmónica</b> das duas.</div>
+
+<p><b>De onde vem a fórmula</b> (é o método dos volumes finitos, uma leitura nossa para perceber, não é pedida): o calor que passa de <i>p</i> para o vizinho <i>q</i> por uma face é proporcional a <i>κ<sub>pq</sub></i>(<i>u<sub>p</sub></i> − <i>u<sub>q</sub></i>)/<i>h</i>. Somar as 6 faces e igualar ao calor produzido dá</p>
+<math display="block"><mrow><munder><mo>∑</mo><mi>q</mi></munder><msub><mi>κ</mi><mrow><mi>p</mi><mi>q</mi></mrow></msub><mo>(</mo><msub><mi>u</mi><mi>p</mi></msub><mo>−</mo><msub><mi>u</mi><mi>q</mi></msub><mo>)</mo><mo>=</mo><msup><mi>h</mi><mn>2</mn></msup><msub><mi>q</mi><mi>p</mi></msub><mspace width="1.5em"/><mo>⟹</mo><mspace width="1.5em"/><msub><mi>u</mi><mi>p</mi></msub><mo>=</mo><mfrac><mrow><mo>∑</mo><msub><mi>κ</mi><mrow><mi>p</mi><mi>q</mi></mrow></msub><msub><mi>u</mi><mi>q</mi></msub><mo>+</mo><msup><mi>h</mi><mn>2</mn></msup><msub><mi>q</mi><mi>p</mi></msub></mrow><mrow><mo>∑</mo><msub><mi>κ</mi><mrow><mi>p</mi><mi>q</mi></mrow></msub></mrow></mfrac></mrow></math>
+<p>Ou seja: <b>a temperatura de <i>p</i> é uma média pesada das temperaturas dos vizinhos</b>, em que pesa mais o vizinho com quem <i>p</i> troca calor com mais facilidade, mais um empurrão para cima se <i>p</i> for aquecedor.</p>
+
+<div class="box analog"><b class="t">Para perceber: porquê a média harmónica?</b>
+Entre os centros de <i>p</i> e <i>q</i> o calor atravessa meia célula de cada material, uma atrás da outra, <b>em série</b>, como duas resistências elétricas em série. Em série somam-se as <i>resistências</i> (1/<i>κ</i>), e isso dá exatamente a média harmónica.<br>
+Exemplo: carbono (<i>κ</i> = 20) encostado a ar (<i>κ</i> = 0.05).
+Média aritmética: (20 + 0.05)/2 ≈ 10. Média harmónica: 2·20·0.05/20.05 ≈ <b>0.0998</b>.
+A harmónica fica perto do pior material, e está certo: o calor não passa bem só porque um dos lados é bom condutor; o ar trava-o. Fisicamente é isto que cria as «sombras» frias em volta dos poros na Figura 3.</div>
+
+<figure>
+<svg viewBox="0 0 680 210" width="100%" font-family="DejaVu Sans, sans-serif" font-size="10.5">
+  {{MATSLICE}}
+</svg>
+<figcaption>Figura 7. Um corte com materiais (ilustrativo). Para cada ponto, o código vê o material de <i>p</i> e o de cada vizinho, vai buscar as duas condutividades à tabela e calcula a média harmónica. Os coeficientes <b>não estão guardados</b>: são calculados em cada ponto, em cada iteração.</figcaption>
+</figure>
+
+<h3>Um sistema linear que nunca é guardado</h3>
+<div class="box enun"><b class="t">Os slides dizem (slide 4)</b>
+Há uma equação por ponto interior, <i>a<sub>p</sub>u<sub>p</sub></i> − Σ <i>a<sub>pq</sub>u<sub>q</sub></i> = <i>b<sub>p</sub></i>. Todas juntas formam um sistema esparso <b>Au = b</b> (512³: 1.3·10<sup>8</sup> incógnitas). «The matrix is never stored: the stencil applies it on the fly».</div>
+<p>A matriz <b>A</b> teria 1.3·10<sup>8</sup> linhas, cada uma com só 7 valores não nulos. Guardá-la seria desperdício: os coeficientes saem da tabela de materiais. O lado bom: menos memória. O lado mau: <b>mais contas</b> por ponto (as divisões da média harmónica). Este compromisso, «guardar ou recalcular», é uma das alavancas de otimização da Task 2 (por exemplo, pré-calcular uma tabela de <i>κ<sub>pq</sub></i> para cada <i>par</i> de materiais, que só tem 4×4 entradas).</p>
+
+<!-- ============================================================ -->
+<h2>6. A iteração de Jacobi</h2>
+
+<p>Resolver <b>Au = b</b> diretamente para 10<sup>8</sup> incógnitas é impraticável. O método de <b>Jacobi</b> resolve por aproximações sucessivas:</p>
+<ol>
+<li>Começa com um palpite inicial <i>u</i><sup>(0)</sup> (vem do ficheiro de entrada).</li>
+<li>Calcula um <i>u</i><sup>(n+1)</sup> novo em <b>todos</b> os pontos, usando apenas os valores <i>u</i><sup>(n)</sup> da iteração anterior.</li>
+<li>Repete. Cada volta aproxima-se da solução.</li>
+</ol>
+
+<div class="box enun"><b class="t">Os slides dizem (slide 5)</b>
+«Each new value uses only values of the previous iterate» · «Two copies of the grid: the current and the new iterate» · «Repeat for a fixed number of iterations». Nas notas: o novo valor em <i>p</i> nunca usa valores novos de outros pontos; «that is what distinguishes Jacobi from Gauss–Seidel».</div>
+
+<figure>
+<svg viewBox="0 0 680 245" width="100%" font-family="DejaVu Sans, sans-serif" font-size="11">
+  {{PINGPONG}}
+</svg>
+<figcaption>Figura 8. As duas cópias. O sweep lê só de <span class="mono">u</span> e escreve só em <span class="mono">u_new</span>; depois <span class="mono">u_new</span> passa a ser o atual. Na referência isto é uma cópia (<span class="mono">jacobi_update</span>); trocar os dois ponteiros faria o mesmo sem mover dados.</figcaption>
+</figure>
+
+<div class="box analog"><b class="t">Para perceber: Jacobi vs. Gauss–Seidel</b>
+Jacobi é como uma turma em que todos escrevem a sua nova resposta ao mesmo tempo, olhando só para as respostas antigas dos colegas. Gauss–Seidel é a turma a responder em fila: cada um já vê as respostas novas de quem respondeu antes. Gauss–Seidel converge mais depressa, mas cria uma ordem obrigatória entre pontos; Jacobi deixa <b>todos os pontos independentes</b> dentro de uma iteração, o que é ótimo para paralelizar. O enunciado obriga a manter Jacobi (secção 11).</div>
+
+<h3>Medir a convergência: o resíduo <i>r</i></h3>
+<div class="box enun"><b class="t">Os slides dizem (slide 7)</b>
+<math display="block"><mrow><msup><mi>r</mi><mrow><mo>(</mo><mi>n</mi><mo>)</mo></mrow></msup><mo>=</mo><mo>‖</mo><msup><mi>u</mi><mrow><mo>(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo>)</mo></mrow></msup><mo>−</mo><msup><mi>u</mi><mrow><mo>(</mo><mi>n</mi><mo>)</mo></mrow></msup><msub><mo>‖</mo><mn>2</mn></msub><mo>=</mo><msqrt><mrow><munder><mo>∑</mo><mi>p</mi></munder><msup><mrow><mo>(</mo><msubsup><mi>u</mi><mi>p</mi><mrow><mo>(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo>)</mo></mrow></msubsup><mo>−</mo><msubsup><mi>u</mi><mi>p</mi><mrow><mo>(</mo><mi>n</mi><mo>)</mo></mrow></msubsup><mo>)</mo></mrow><mn>2</mn></msup></mrow></msqrt></mrow></math>
+A convergência é lenta: ≈ 3 400 iterações para 128³. Os programas correm um número fixo de iterações (opção <span class="mono">-i</span>) e reportam o tamanho da última atualização. Paragem opcional quando <i>r</i> &lt; TOL (opção <span class="mono">-t</span>). O desempenho mede-se por iteração: <b>tempo/iteração</b> e <b>MLUP/s</b>.</div>
+
+<p><b>Porquê tão lento?</b> Numa iteração a informação só anda um ponto. O calor da face quente precisa de, no mínimo, <i>n</i> iterações para chegar à face oposta, e na prática muitas mais: as notas do slide 7 dizem que o erro só cai por um fator <i>e</i> a cada 2/(π²<i>h</i>²) iterações; para 128³, <i>h</i> = 1/129 dá 2·129²/π² ≈ 3 400. Por isso o trabalho <b>não mede «tempo até à solução certa»</b>; mede o custo de <b>uma iteração</b>, que é sempre igual. Com 100 iterações (a validação) o campo ainda está longe do equilíbrio, e isso não é um erro.</p>
+
+<div class="box analog"><b class="t">Para perceber: MLUP/s</b>
+MLUP/s = milhões de pontos atualizados por segundo (<i>Million Lattice-point Updates Per second</i>) = <i>n<sub>x</sub>n<sub>y</sub>n<sub>z</sub></i> × iterações / (tempo × 10<sup>6</sup>). Exemplo: 520³ ≈ 1.41·10<sup>8</sup> pontos, 10 iterações em 2 s → 703 MLUP/s. É a métrica mais honesta para comparar versões com números de FLOPs diferentes: se uma versão faz menos contas por ponto, os GFLOP/s podem até descer, mas os MLUP/s sobem.</div>
+
+<!-- ============================================================ -->
+<h2>7. Paralelismo e dependências</h2>
+
+<div class="box enun"><b class="t">Os slides dizem (slide 6)</b>
+<b>Dentro</b> de uma iteração todos os pontos são independentes e podem ser feitos por qualquer ordem: threads, lanes SIMD, threads da GPU. <b>Entre</b> iterações a ordem é estrita: a iteração <i>n</i>+1 precisa dos valores dos vizinhos da iteração <i>n</i>. Ao partir a grelha (threads, processos MPI, CPU+GPU), subdomínios vizinhos trocam os planos de fronteira em cada iteração. A medida de convergência é uma <b>redução</b> sobre todos os pontos.</div>
+
+<figure>
+<svg viewBox="0 0 680 200" width="100%" font-family="DejaVu Sans, sans-serif" font-size="11">
+  {{DECOMP}}
+</svg>
+<figcaption>Figura 9. A grelha partida em fatias por 4 trabalhadores (threads, processos MPI ou dispositivos). Cada fatia precisa do plano da fatia vizinha (a tracejado) para atualizar os seus pontos de fronteira. Em OpenMP isto é implícito (memória partilhada + barreira no fim da iteração); em MPI ou CPU+GPU é uma cópia explícita, a «halo exchange».</figcaption>
+</figure>
+
+<p>Há portanto <b>três níveis</b> de paralelismo, e o enunciado pede que pensemos em todos:</p>
+<ul>
+<li><b>SIMD/vetorização</b> (dentro de um core): vários pontos seguidos ao mesmo tempo. AVX2 no AMD faz 8 floats por instrução; SVE no A64FX faz 16. Precisa de acessos <b>contíguos</b> na memória, ou seja, de varrer na direção <i>k</i>.</li>
+<li><b>Threads</b> (vários cores, OpenMP): cada thread faz uma fatia. Atenção à NUMA: a memória deve ser inicializada pela thread que a usa.</li>
+<li><b>Processos/dispositivos</b> (MPI, GPU): só se compensar. O enunciado diz «MPI+OpenMP (if it makes sense given the architecture of the target CPUs)».</li>
+</ul>
+<div class="box interp"><b class="t">Interpretação nossa</b>
+O «if it makes sense» é um convite a justificar. O A64FX tem 4 CMG (cada um com a sua memória HBM2) e o nó AMD tem 2 sockets × 4 domínios NUMA: em ambos há argumentos para 1 processo MPI por domínio de memória, mas também se pode resolver com OpenMP e boa colocação de memória. A escolha é nossa, desde que medida e explicada.</div>
+
+<p>O <b>resíduo</b> é uma soma de todos os pontos: em paralelo cada thread soma a sua parte e no fim junta-se (redução). A ordem das somas muda o arredondamento, por isso o <i>r</i> final pode diferir ligeiramente da referência (é esperado; secção 11).</p>
+
+<!-- ============================================================ -->
+<h2>8. O código de referência</h2>
+
+<div class="box enun"><b class="t">Os slides dizem (slides 12–14)</b>
+Cada variante tem <span class="mono">main.cpp</span> (ciclo das iterações), <span class="mono">grid.cpp</span> (estruturas, leitura, escrita), <span class="mono">jacobi.cpp</span> (os kernels) e <span class="mono">&lt;variante&gt;.h</span> (fórmula e formato). <span class="mono">common/</span> é partilhado e normalmente não precisa de mudar. C++11 portável (GCC, Fujitsu FCC, icpx, nvc++, clang). O tempo medido («solve time») é só o ciclo das iterações: sweep + residual + update.</div>
+
+<pre>carregar a grelha do ficheiro           // grid_alloc, grid_load      (não cronometrado)
+para it = 1 .. ITERS:                    // ---- solve time: só isto ----
+    jacobi_sweep(g)                      // u_new ← update(u)    (a fórmula da secção 5)
+    r = jacobi_residual(g)               // ‖u_new − u‖₂         (a redução)
+    jacobi_update(g)                     // u ← u_new            (cópia)
+    se r &lt; TOL: parar                    // só com -t
+escrever u no ficheiro de saída          // grid_emit
+imprimir relatório e linha CSV           // tempos, MLUP/s, checksum</pre>
+
+<p>O fluxo de trabalho típico (slide 14): gerar um dataset com <span class="mono">tools/gen_input.py</span> (pode escolher o tamanho em MiB de memória usada, útil para os tamanhos L1/LLC/RAM), compilar com <span class="mono">make</span> (a referência usa GCC <span class="mono">-O2</span>), correr a referência e a nossa versão com o mesmo <span class="mono">-i</span>, comparar com <span class="mono">compare</span> (PASS/FAIL) e ver o resultado com <span class="mono">plot_result.py</span>.</p>
+
+<h3>O kernel varcoef, tal como está</h3>
+<pre>for (k = 1..nz)                     // ciclo de fora:  k
+  for (j = 1..ny)
+    for (i = 1..nx) {               // ciclo de dentro: i   ← repara nisto
+      p = idx(i,j,k)
+      kp = materials[material[p]].conductivity           // double
+      for (n = 0..5) {                                    // 6 vizinhos
+        kq  = materials[material[nb[n]]].conductivity
+        kpq = 2*kp*kq / (kp+kq)                           // 1 divisão por vizinho
+        num += kpq * u[nb[n]];   den += kpq;
+      }
+      num += h2 * materials[material[p]].heat_source;
+      u_new[p] = num / den;                              // + 1 divisão
+    }</pre>
+
+<div class="box interp"><b class="t">Interpretação nossa: o que salta à vista ao ler o código</b>
+O enunciado não lista isto; é a nossa leitura do <span class="mono">varcoef/jacobi.cpp</span> e <span class="mono">varcoef.h</span>. São as oportunidades óbvias para a Task 2.2, e cada uma tem de ser medida, não assumida.
+<ol style="margin:4px 0">
+<li><b>Ordem dos ciclos errada para a memória.</b> Na memória <i>k</i> é o índice mais rápido, mas o ciclo de dentro anda em <i>i</i>. Cada passo salta (<i>n<sub>y</sub></i>+2)(<i>n<sub>z</sub></i>+2) elementos: para <i>n</i> = 520 são ~1 MiB entre dois acessos seguidos. Cada acesso cai numa linha de cache nova (e muitas vezes numa página nova, TLB). Mais nada consegue funcionar bem enquanto isto não for corrigido (nem a vetorização).</li>
+<li><b>7 divisões por ponto</b> (6 médias harmónicas + a final). A divisão é das operações mais lentas, sobretudo no A64FX (na Task 1 medimos a divisão 393× abaixo do pico no A64FX e 14× no AMD).</li>
+<li><b>Contas em <span class="mono">double</span></b> apesar de a solução ser <span class="mono">float</span>: metade das lanes SIMD por instrução. O enunciado deixa mudar a precisão dos cálculos intermédios.</li>
+<li><b>Material como <span class="mono">int</span></b> (4 B) quando no ficheiro é <span class="mono">uint8</span> (1 B): 3 B por ponto a mais a mover. E uma indireção (<span class="mono">materials[material[p]]</span>) para ir buscar κ.</li>
+<li><b>Três passagens pela grelha</b> por iteração (sweep, resíduo, cópia), quando o resíduo podia ser calculado dentro do sweep e a cópia trocada por troca de ponteiros. Menos passagens = menos bytes da RAM.</li>
+<li><b><span class="mono">std::pow(x, 2.0)</span></b> no resíduo em vez de <span class="mono">x*x</span>; e tudo numa só thread.</li>
+</ol></div>
+
+<!-- ============================================================ -->
+<h2>9. Contas e bytes por ponto: a intensidade operacional</h2>
+
+<p>Para pôr o Jacobi no roofline (Task 2.4) é preciso saber duas coisas por ponto e por iteração: <b>quantas operações de vírgula flutuante (FLOP)</b> faz e <b>quantos bytes</b> tem de trazer da memória. A razão é a <b>intensidade operacional</b> (OI, em FLOP/byte).</p>
+
+<table>
+<tr><th>Parte</th><th>Contas por ponto (referência)</th><th>FLOP</th></tr>
+<tr><td>Média harmónica 2·κ<sub>p</sub>·κ<sub>q</sub>/(κ<sub>p</sub>+κ<sub>q</sub>)</td><td>2 multiplicações + 1 soma + 1 divisão</td><td>4</td></tr>
+<tr><td><span class="mono">num += kpq·u</span>; <span class="mono">den += kpq</span></td><td>1 mult. + 1 soma; 1 soma</td><td>3</td></tr>
+<tr><td>× 6 vizinhos</td><td>(4 + 3) × 6</td><td>42</td></tr>
+<tr><td>Fonte <span class="mono">num += h2·q</span> e divisão final</td><td>1 mult. + 1 soma + 1 divisão</td><td>3</td></tr>
+<tr><th>Sweep</th><th></th><th>45</th></tr>
+<tr><td>Resíduo (diferença, quadrado, soma)</td><td></td><td>3</td></tr>
+</table>
+
+<p><b>Bytes úteis do sweep</b>: ler <span class="mono">u</span> (4 B), ler <span class="mono">material</span> (4 B) e escrever <span class="mono">u_new</span> (4 B) = 12 B. Contamos cada elemento uma vez, supondo que os vizinhos já estão em cache quando são precisos (os 6 vizinhos de <i>p</i> são o centro de outros pontos). Isto dá</p>
+<math display="block"><mrow><mtext>OI</mtext><mo>=</mo><mfrac><mrow><mn>45</mn><mtext> FLOP</mtext></mrow><mrow><mn>12</mn><mtext> B</mtext></mrow></mfrac><mo>≈</mo><mn>3.75</mn><mtext> FLOP/B</mtext></mrow></math>
+
+<div class="box interp"><b class="t">Interpretação nossa (já decidida: D24)</b>
+Contamos <b>bytes úteis</b> (sem write-allocate e um elemento por acesso). Com write-allocate a escrita custa a dobrar (16 B movidos); com resíduo e cópia, a referência completa faz 48 FLOP em ~36 B (OI ≈ 1.33). E se a ordem dos ciclos estiver errada (secção 8), os bytes reais são muito mais, porque cada acesso traz uma linha de cache inteira (64 B no AMD, 256 B no A64FX) para usar 4 B. O enunciado aceita «measure or estimate» (2.4); o ideal é calcular a OI teórica e confirmar os bytes reais com contadores (perf/PAPI).</div>
+
+<div class="box analog"><b class="t">Para perceber: as otimizações mudam a OI</b>
+A OI não é uma constante do algoritmo; depende da implementação. Material em 1 byte → menos bytes → OI sobe. Tabela de <i>κ<sub>pq</sub></i> por par de materiais → menos FLOP (sem divisões) → OI desce (nos nossos números, ~2.3 para a versão «E2»). As duas mudanças podem tornar o programa mais rápido mesmo com OI a descer. É por isso que, para comparar versões, os MLUP/s contam mais do que os GFLOP/s.</div>
+
+<!-- ============================================================ -->
+<h2>10. O roofline e onde o Jacobi cai</h2>
+
+<p>O <b>roofline</b> (Williams, Waterman e Patterson, 2008) é um gráfico com duas regras simples. Uma máquina não pode fazer mais contas por segundo do que o seu <b>pico</b> (o telhado horizontal), nem consumir mais dados do que a sua <b>banda de memória</b> deixa (a rampa inclinada: desempenho = banda × OI). O desempenho possível é o mínimo dos dois:</p>
+<math display="block"><mrow><mtext>Desempenho máximo</mtext><mo>=</mo><mo>min</mo><mo>(</mo><mtext>pico</mtext><mo>,</mo><mspace width="0.3em"/><mtext>banda</mtext><mo>×</mo><mtext>OI</mtext><mo>)</mo></mrow></math>
+<p>O canto onde a rampa encontra o telhado é o <b>ridge point</b>. À esquerda dele, um programa está <b>limitado pela memória</b>; à direita, <b>limitado pelas contas</b>.</p>
+
+<figure>
+{{ROOF}}
+<figcaption>Figura 10. Os rooflines FP32 medidos na nossa Task 1 (pico e banda STREAM sem write-allocate: AMD 11 269 GFLOP/s e 299 GB/s; A64FX 6 049 GFLOP/s e 813 GB/s). A linha verde é a OI do sweep (3.75): fica à esquerda dos dois ridges, portanto o Jacobi é <b>limitado pela memória</b> nas duas máquinas, e o A64FX, com HBM2, tem o teto mais alto apesar de ter metade do pico. O losango da referência é uma ordem de grandeza (1 thread, acessos com salto), não um ponto medido da Task 2. Com write-allocate (224 e 606 GB/s) os máximos descem para ~0.84 e ~2.3 TFLOP/s, como está no relatório da Task 1.</figcaption>
+</figure>
+
+<p>A leitura deste gráfico é o centro do trabalho. A referência está <b>mais de mil vezes abaixo</b> do telhado de memória. A Task 2 é perceber e explicar <b>porquê</b> e <b>quanto conseguimos subir</b>, e os <b>tetos</b> (ceilings) da 1.3 servem exatamente para isso: são telhados mais baixos que só se ultrapassam com uma certa otimização. Exemplo: «sem vetorização», «com divisões», «uma só thread», «acessos com salto», «memória no domínio NUMA errado». Quando o ponto de uma versão fica colado a um teto, o teto diz qual otimização falta.</p>
+
+<div class="box enun"><b class="t">O enunciado diz (1.2, 1.3, 2.4)</b>
+1.2: construir e comparar os rooflines FP32 do AMD 7742 e do A64FX <b>no mesmo gráfico</b>, seguindo o Apêndice A do artigo de 2008 (e os labs 2 e 2.5). 1.3: acrescentar tetos «and clearly justify each ceiling in the context of the algorithm to be tested. Order these ceilings accordingly». 2.4: medir ou estimar a OI e os GFLOP/s da referência e da melhor versão nos 2 tamanhos e pô-los nos rooflines x86 e ARM.</div>
+
+<!-- ============================================================ -->
+<h2>11. Regras: o que se pode e não se pode mudar</h2>
+
+<table>
+<tr><th style="width:50%">Pode mudar (slide 16)</th><th>Tem de manter (slide 16)</th></tr>
+<tr><td>
+<ul style="margin:0">
+<li>estruturas de dados e organização na memória</li>
+<li>ordem dos ciclos, blocking no espaço e no tempo</li>
+<li>precisão dos cálculos intermédios</li>
+<li>como se tratam a fronteira e a medida de convergência</li>
+<li>paralelização: OpenMP, MPI, CUDA, SYCL</li>
+<li>compiladores e flags</li>
+</ul></td><td>
+<ul style="margin:0">
+<li>a equação, a discretização e os dados do problema (do ficheiro de entrada)</li>
+<li>o método de Jacobi: <b>nada</b> de Gauss–Seidel, red-black, SOR ou multigrid</li>
+<li>a linha de comando, formatos de entrada e saída, o <i>r</i> final e a opção <span class="mono">-t</span></li>
+<li>a solução guardada em <b>float</b> (precisão simples)</li>
+<li>validação contra a referência com <span class="mono">compare</span></li>
+</ul></td></tr>
+</table>
+
+<p><b>Porquê estas regras?</b> Para que os resultados continuem <b>comparáveis</b>: se mudássemos de método (por exemplo multigrid), ficaríamos mais rápidos por uma razão matemática e não por usarmos melhor a máquina, que é o que se está a avaliar. As notas do slide 16 dizem que o <i>temporal blocking</i> é permitido porque calcula <b>exatamente os mesmos iterados</b>.</p>
+
+<div class="box enun"><b class="t">Validação (slide 15 e Task 2.3)</b>
+Correr a referência e a nossa versão no mesmo input com o mesmo <span class="mono">-i</span>; <span class="mono">compare</span> verifica cada ponto: |<i>u</i> − <i>u</i><sub>ref</sub>| ≤ 10<sup>−3</sup>|<i>u</i><sub>ref</sub>| + 10<sup>−5</sup>·max|<i>u</i><sub>ref</sub>|, mais o erro L2 relativo. Não tem de ser bit a bit igual: vetorização, FMA e reduções mudam o arredondamento. Validar com <span class="mono">-i 100</span>; <span class="mono">scripts/validate.sh</span> testa 32³, 101³, 128³ e 40×33×57.</div>
+<p>Repara no <b>40×33×57</b>: tamanhos ímpares e diferentes em cada eixo apanham erros de vetorização (o «resto» quando <i>n</i> não é múltiplo de 8 ou 16) e de índices trocados entre eixos. Uma versão pode passar em 128³ e falhar aqui.</p>
+
+<!-- ============================================================ -->
+<h2>12. Task 1, alínea a alínea</h2>
+<p class="small">Já está feita (medições, rooflines e relatório). Esta secção serve para perceber <i>o que foi pedido</i>; as nossas escolhas estão no <span class="mono">decisoes_explicadas.pdf</span> e a revisão em <span class="mono">task1/revisao_task1.txt</span>.</p>
+
+<h3>1.1 Caracterizar o hardware das três partições (x86, ARM, A100)</h3>
+<div class="box enun"><b class="t">O enunciado diz</b>
+(i) fabricante, modelo, fabricante/modelo/referência do CPU, latência e tamanho da memória principal; (ii) para CPU e GPU, nº de cores e pico FP; (iii) hierarquia de memória: caches e banda de acesso à memória (a partir da LLC). «Explain how you got these figures».</div>
+<p>O ponto mais importante é a última frase: <b>não basta copiar números de uma ficha técnica</b>; é preciso dizer de onde vêm (manual, <span class="mono">lscpu</span>, microbenchmark) e, idealmente, medir. A diferença entre o valor nominal e o medido é, ela própria, um resultado (por exemplo, o AMD a 2.81 GHz em carga e não a 2.25).</p>
+
+<h3>1.2 Roofline FP32 do AMD 7742 e do A64FX</h3>
+<p>Dois rooflines no <b>mesmo</b> gráfico de intensidade, para os comparar diretamente. Só CPU (a GPU não é pedida aqui).</p>
+
+<h3>1.3 Tetos</h3>
+<p>Os tetos têm de ser <b>justificados pelo algoritmo a testar</b> (o Jacobi varcoef) e <b>ordenados</b>. «Ordenar» quer dizer: o teto mais baixo é a otimização mais difícil de evitar / que tem de ser resolvida primeiro, e assim por diante, como no artigo.</p>
+
+<h3>1.4 Metodologia de testes</h3>
+<div class="box enun"><b class="t">O enunciado diz</b>
+Tudo o que é preciso para <b>replicar</b> as medições: protocolo (software e hardware, nº de medições e análise estatística, profilers e porquê); lista de testes (escalabilidade até N threads, overhead de paralelização, miss rates, …); lista de métricas e para que servem (tempo, energia, contadores, …); justificação de cada análise (objetivos, o que permite perceber, resultados esperados); e <b>3 tamanhos</b> das estruturas de dados: um que caiba todo na L1, um que só precise da LLC e um que precise da RAM (&gt; 1 GiB). Desvios ao protocolo no relatório final são aceites se justificados.</div>
+<p>Esta alínea é um <b>plano</b> para a Task 2. «Resultados esperados» quer dizer escrever <i>antes</i> o que achamos que vai acontecer (ex.: «com <i>n</i> = 520 a versão paralela deve ficar perto do teto de banda»); depois, no ensaio, comparar com o que aconteceu. É aqui que o pensamento crítico se vê.</p>
+
+<!-- ============================================================ -->
+<h2>13. Task 2, alínea a alínea</h2>
+
+<h3>2.1 Tabelas das medições</h3>
+<div class="box enun"><b class="t">O enunciado diz</b>
+Construir tabelas com as medições planeadas na 1.4 para as <b>implementações incrementais</b>; registar as diferenças entre otimizações; as tabelas são a base dos gráficos da Task 3.</div>
+<p>«Incrementais» é a palavra-chave: não se salta da referência para a versão final. Faz-se uma mudança de cada vez (ex.: E0 referência → E1 ordem dos ciclos → E2 material em 1 B + tabela de pares → E3 OpenMP → E4 vetorização …), mede-se cada uma e regista-se o ganho. Só assim se consegue dizer <i>que</i> otimização deu <i>que</i> ganho e <i>porquê</i>. A linha CSV que o programa imprime (slide 14) foi feita para isto.</p>
+
+<h3>2.2 Escrever a versão otimizada</h3>
+<div class="box enun"><b class="t">O enunciado diz</b>
+Otimizar o algoritmo do repositório, escolhendo box27 ou varcoef. Considerar vetorizar, mudar estruturas de dados e padrões de acesso para melhorar a localidade, e paralelizar com OpenMP ou MPI+OpenMP (se fizer sentido na arquitetura). As otimizações contam para a nota, mas analisar o comportamento nas diferentes máquinas conta mais: «Manage your time wisely».</div>
+
+<h3>2.3 Dois tamanhos e validação</h3>
+<div class="box enun"><b class="t">O enunciado diz</b>
+Escolher (e justificar) 2 tamanhos: (i) que só precise da LLC; (ii) que precise da RAM (&gt; 1 GiB). Validar comparando a matriz de saída com a da referência.</div>
+<div class="box atencao"><b class="t">Atenção</b>
+A 1.4 pedia <b>3</b> tamanhos (L1, LLC, RAM); a 2.3 pede só <b>2</b> (LLC, RAM). A leitura mais provável: a L1 é útil para caracterizar o kernel (desempenho «com dados sempre à mão»), mas a análise obrigatória da Task 2 é LLC e RAM. Também: «só precisa da LLC» depende de quantas threads correm (com 128 threads o problema divide-se por 128 caches privadas). Por isso temos tamanhos LLC diferentes para 1 thread e para o nó inteiro (D22).</div>
+
+<h3>2.4 Pontos do Jacobi no roofline</h3>
+<p>Para a <b>referência</b> e a <b>melhor versão</b>, nos <b>2 tamanhos</b>, medir ou estimar a OI e os GFLOP/s e pô-los nos rooflines x86 e ARM (Figura 10). São pelo menos 2 versões × 2 tamanhos × 2 máquinas = 8 pontos.</p>
+<div class="box atencao"><b class="t">Atenção</b>
+O enunciado diz «peak GFlops/s of the reference and your best-optimised implementation». Interpretamos como o <b>melhor desempenho alcançado</b> por cada implementação (os GFLOP/s medidos), não o pico da máquina, que já está no roofline. A distância vertical entre o ponto e o telhado é o que se discute.</div>
+
+<h3>2.5 Portar para GPU</h3>
+<div class="box enun"><b class="t">O enunciado diz</b>
+«Port your best implementation to GPU using CUDA, <b>or</b> to use the CPU and GPU simultaneously using SYCL». Identificar e implementar otimizações relevantes para o dispositivo; medir nos 2 tamanhos.</div>
+<p>Numa GPU A100 o paralelismo é massivo (milhares de threads), a memória HBM2 tem ~1.5 TB/s, mas os dados têm de lá chegar: copiar a grelha para a GPU (H2D) e de volta (D2H) custa tempo, e isso deve ser separado do tempo do kernel. Otimizações típicas: acessos «coalesced» (threads vizinhas a ler endereços vizinhos, ou seja, <i>k</i> nas threads), memória partilhada para reutilizar vizinhos, e evitar cópias entre iterações (as duas grelhas ficam na GPU).</p>
+<div class="box atencao"><b class="t">Atenção: contradição enunciado vs. slides</b>
+O <b>enunciado</b> diz CUDA <b>ou</b> SYCL (CPU+GPU). Os <b>slides</b> dizem «port it to CUDA <b>and</b> SYCL» (slide 2) e o pipeline do slide 17 tem «→ CUDA → SYCL CPU+GPU →»; as notas do slide 17 dizem até «Task 2.5 is the CUDA port; Task 2.6 the SYCL CPU+GPU version», o que não bate com o enunciado, onde a 2.6 é profiling. Como o enunciado é o documento oficial, a leitura mínima é «um dos dois», mas <b>convém perguntar ao professor</b> se espera os dois.</div>
+
+<h3>2.6 Profiling: o que limita o desempenho</h3>
+<div class="box enun"><b class="t">O enunciado diz</b>
+Usar profilers adequados para identificar e caracterizar os fatores que limitam o desempenho «of the implementation in 2.7». Avaliar código e hardware em: utilização de recursos, «boundness» (limitado por memória ou por contas), acessos e uso de memória, comunicação. Identificar caminhos de otimização.</div>
+<div class="box atencao"><b class="t">Atenção</b>
+«the implementation in 2.7» parece uma gralha: a 2.7 é a comparação, não uma implementação. Leitura provável: a implementação da alínea anterior (2.5, a GPU) ou a melhor implementação em geral. A leitura segura é fazer profiling da melhor versão CPU <i>e</i> da GPU.</div>
+
+<h3>2.7 Comparar implementações e arquiteturas (incluindo energia)</h3>
+<div class="box enun"><b class="t">O enunciado diz</b>
+Comparar desempenho e/ou escalabilidade das implementações. A análise deve focar <b>os aspetos arquiteturais de cada plataforma</b> que afetam o desempenho e como cada plataforma se adequa às características do código. «Analyse and characterise the optimised algorithm, but, more importantly, use it to compare the different architectures». Análise crítica. Comparar também a <b>pegada energética</b>: total, energia até à solução, energia por elemento processado, «use your imagination».</div>
+<p>Este é o parágrafo mais importante do enunciado. O Jacobi é o <b>instrumento</b>; o objeto de estudo são as <b>arquiteturas</b>. Perguntas típicas: porque é que o A64FX (menos pico, mais banda) ganha ou perde ao AMD neste código? Quanto da diferença se explica só pela banda de memória? O que a GPU ganha e quanto perde nas cópias? Quem faz o mesmo trabalho com menos joules?</p>
+<div class="box interp"><b class="t">Interpretação nossa: métricas de energia</b>
+Exemplos que encaixam no «use your imagination»: joules por iteração, joules por milhão de pontos atualizados, GFLOP/s por watt, energia até a solução atingir uma tolerância. No Deucalion o Slurm não regista energia; no AMD há RAPL via <span class="mono">perf</span>, na GPU <span class="mono">nvidia-smi</span>/NVML; no A64FX há que ver o que existe (já falámos de <span class="mono">perf energy</span>). A comparação entre máquinas só é justa se medirmos a mesma coisa (só o processador, ou o nó inteiro), e isso deve ser dito.</div>
+
+<!-- ============================================================ -->
+<h2>14. Task 3: relatório final e apresentação</h2>
+<div class="box enun"><b class="t">O enunciado diz</b>
+Ensaio curto em <b>inglês</b>, formato IEEE em duas colunas, <b>no máximo 5 páginas incluindo anexos</b>, com: (i) título; (ii) autores; (iii) abstract; (iv) introdução; (v) secções que descrevem o algoritmo e o seu comportamento (contas e acessos à memória), <b>sem repetir o que já está na entrega da Task 1</b>; (vi) conclusões; (vii) referências por ordem de aparecimento, com todos os dados para as encontrar (autores, título, onde, quem publicou, ano). A apresentação só reporta a Task 2, «which includes the rooflines for each partition, but not how they were created». Submeter no Blackboard até 6 de janeiro, 23:59.</div>
+<ul>
+<li><b>«Not how they were created»</b>: os rooflines aparecem no ensaio e na apresentação com os pontos do Jacobi, mas a forma de os medir já foi contada na Task 1 e não se repete.</li>
+<li><b>«Rooflines for each partition»</b>: a 2.4 só fala de x86 e ARM, mas esta frase fala de cada partição, o que pode incluir a A100. Temos os valores da A100 medidos na Task 1, por isso juntar um roofline da GPU com o ponto CUDA é barato e fecha a dúvida (interpretação nossa).</li>
+<li><b>5 páginas incluindo anexos</b> é pouco: as tabelas da 2.1 têm de ser condensadas em gráficos e só os números que sustentam conclusões entram.</li>
+<li><b>Referências por ordem de aparecimento</b> é o estilo IEEE numérico ([1], [2], … pela ordem em que são citadas).</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>15. Pontos ambíguos a confirmar com o professor</h2>
+<table>
+<tr><th>#</th><th>Dúvida</th><th>De onde vem</th><th>Leitura que seguimos até haver resposta</th></tr>
+<tr><td>1</td><td>CUDA <i>ou</i> SYCL, ou os dois?</td><td>Enunciado 2.5 diz «or»; slides 2 e 17 dizem «and»</td><td>CUDA obrigatório; SYCL se houver tempo</td></tr>
+<tr><td>2</td><td>Que implementação vai ao profiling?</td><td>2.6 refere «implementation in 2.7»</td><td>Melhor versão CPU e versão GPU</td></tr>
+<tr><td>3</td><td>Roofline da A100 é pedido?</td><td>2.4 (só x86 e ARM) vs. Task 3 («each partition»)</td><td>Incluir, se couber nas 5 páginas</td></tr>
+<tr><td>4</td><td>«Peak GFlops/s» de uma implementação</td><td>2.4</td><td>Melhor desempenho medido</td></tr>
+<tr><td>5</td><td>Tamanho L1 na Task 2?</td><td>1.4 pede 3 tamanhos, 2.3 pede 2</td><td>Obrigatórios LLC e RAM; L1 como extra</td></tr>
+<tr><td>6</td><td>Equipa de 2 em vez de 3</td><td>Context</td><td>Confirmar que não altera o que é pedido</td></tr>
+<tr><td>7</td><td>Data da apresentação</td><td>Slide 17: «to be announced»</td><td>Aguardar</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>16. Resumo numa página</h2>
+<div class="box analog" style="font-size:10.4pt"><b class="t">O enunciado em 12 frases</b>
+<ol style="margin:4px 0">
+<li>O problema é calcular a temperatura de equilíbrio num cubo feito de 4 materiais, com uma face quente e um aquecedor no centro.</li>
+<li>O cubo é uma grelha 3D n×n×n com uma camada de halo à volta (fronteira fixa); <i>k</i> é o índice contíguo na memória.</li>
+<li>Cada ponto novo é uma média pesada dos 6 vizinhos, com pesos dados pela média harmónica das condutividades.</li>
+<li>Jacobi: duas cópias da grelha; cada iteração lê só a antiga e escreve só a nova; todos os pontos de uma iteração são independentes.</li>
+<li>Corre-se um número fixo de iterações; o que se mede é o custo de uma iteração (tempo/iteração, MLUP/s, GFLOP/s).</li>
+<li>Por ponto: ~45 FLOP e ~12 bytes úteis → OI ≈ 3.75: limitado pela memória no AMD e no A64FX.</li>
+<li>A referência é muito lenta (1 thread, ciclos na ordem errada, 7 divisões, doubles, 3 passagens): há muito para ganhar.</li>
+<li>Task 1: medir as máquinas, fazer os rooflines com tetos e planear os testes (feita; entrega a 9/12).</li>
+<li>Task 2: otimizar passo a passo, medir cada passo, validar com <span class="mono">compare</span>, pôr pontos no roofline, portar para GPU, fazer profiling e comparar arquiteturas e energia.</li>
+<li>Regras: manter Jacobi, os formatos e a solução em float; mudar tudo o resto é permitido.</li>
+<li>O que dá nota é <b>explicar</b>: porque é que cada máquina tem o desempenho que tem neste código.</li>
+<li>Entrega final: ensaio IEEE em inglês, ≤ 5 páginas, a 6 de janeiro, e apresentação de 10 minutos.</li>
+</ol></div>
+
+</body>
+</html>

@@ -1,0 +1,3 @@
+Build cuda_13.3.r13.3/compiler.37862127_0
+name, clocks.current.sm [MHz], clocks.max.sm [MHz], clocks.current.memory [MHz]
+NVIDIA A100-SXM4-40GB, 210 MHz, 1410 MHz, 1215 MHz

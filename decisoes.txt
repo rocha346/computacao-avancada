@@ -661,6 +661,81 @@ Impacto:      Task 2: usar OpenBLAS/0.3.27-GCC-13.3.0 sempre que houver
               repetir medidas em jobs diferentes antes de citar um número.
 Estado:       DECIDIDO (Rodrigo, 21/11/2026)
 
+[D27] Motivação na introdução do relatório (sem secção de gaps)  (22/11/2026, Task 1)
+Contexto:     Sugestão vinda da cadeira de escrita de papers: o relatório não
+              tinha "research gaps" (slide 9: 3 gaps, pergunta, originalidade,
+              contribuição).
+Decisão:      (escolha do Rodrigo, opção A) Não criar secção de gaps. Juntar
+              1 frase de motivação no fim da introdução:
+              "Datasheet peaks hide this kernel's real limits (divisions,
+              strides, NUMA), so we measure each one before optimising in
+              Task 2."
+Porquê:       - A estrutura de gaps é de artigos de investigação; o enunciado
+                da Task 1 define o conteúdo (1.1-1.4) e só há 2 páginas.
+              - A frase diz para que serve a Task 1 e liga os 3 achados
+                principais (divisões, stride, NUMA) à Task 2.
+Alternativas: Frase B ("Vendor peaks assume FMA-only, unit-stride..."); não
+              acrescentar nada; secção de gaps completa (não cabia).
+Impacto:      Para caber nas 2 páginas: tirada a frase "All runs used whole
+              nodes..." da introdução (as flags do GCC passaram para o
+              protocolo da 1.4), encurtadas 4 frases da 1.4 e a ref. [6].
+              Versão PT explicada atualizada.
+Estado:       DECIDIDO (Rodrigo, 22/11/2026)
+
+[D28] Correções vindas do check-up externo da Task 1    (25/11/2026, Task 1.1-1.4)
+Contexto:     Rodrigo trouxe um check-up crítico feito por outra ferramenta.
+              Cada ponto foi conferido com os nossos ficheiros e dados
+              (avaliação completa: task1/avaliacao_checkup.txt).
+Decisão:      (escolha do Rodrigo, opção A: texto + job GPU curto)
+              1. Sec. III: o roofline simples limita a E1 paralela a 0.84/2.3
+                 TFLOP/s com stores normais (M3) e 1.1/3.0 com M4; mas as
+                 divisões limitam a E1 do A64FX a ~0.1 TFLOP/s (Sec. IV).
+              2. Tabela I: título "per node (A100: per GPU)"; nó GPU =
+                 "4xA100, 2 EPYC"; 40 GB -> 40 GiB.
+              3. Tabela II: C2 = "no divisions (E2 + reciprocal)"; título
+                 "measured or derived" (M1 e o M4 do AMD são calculados).
+              4. Amdahl: no T2 (escalabilidade forte) e no T9 com a ref. [7]
+                 Hill & Marty 2008 (Amdahl em multicore heterogéneo).
+              5. Tamanho LLC da A100: n = 110 (16 MiB, metade da L2 de 40 MiB,
+                 que são 2 metades de 20 MiB); RAM n = 520 nas 3.
+              6. Job GPU curto (job_t1_gpu_l2.sh): banda da L2 da A100 (para
+                 preencher o "--" da Tabela I, pedido na 1.1(iii)) e modelo do
+                 nó GPU (/sys/class/dmi) + NVLink.
+Porquê:       - (1) era uma contradição real entre secções; (2), (5) e (6)
+                são lacunas diretas ao enunciado (1.1 pede CPU e GPU de cada
+                partição e a banda da LLC; 2.5 pede 2 tamanhos na GPU); (4) o
+                enunciado pede Amdahl/Gustafson no Context e o relatório só
+                tinha Gustafson; (3) o rótulo antigo não batia com o texto.
+Rejeitado:    - n = 13 em vez de 14 na L1 do A64FX: o "aliasing" não existe
+                (3 arrays de 16 KiB = 3 das 4 vias de cada conjunto, cabe tudo).
+              - Prazo "dia 28": o enunciado diz 9 de dezembro, 23:59.
+              - Nomes do nó GPU (XH2000/G492), NVLink, THP no x86, pico da L2
+                do A64FX: sem prova nos nossos dados; só entram se medidos.
+Impacto:      Para caber nas 2 páginas saiu a frase "its Copy with
+              write-allocate moves 549.6x24/16 = 824 GB/s, the same as zfill"
+              (a prova dos 32/24 continua na frase anterior) e a ref. [7]
+              ficou curta. Ficheiro IEEEtran.cls copiado para
+              task1/relatorio/ para compilar no PC.
+Resultado do job GPU (25/11, jobs 2269978-2270011, task1/res-gpu-l2-*):
+              - Nó GPU: "Bull SAS G262-ZR0-00", placa MZ62-HD5 (Gigabyte);
+                12 ligações NVLink ativas na nossa GPU (NVLink 3). O
+                "G492-ZD2" do check-up estava errado.
+              - Banda da L2 (LLC) da A100: Triad com loads/stores .cg (só L2),
+                patamar de 3015-3067 GB/s dos 12 aos 24 MiB (total dos 3
+                arrays), 2736 aos 30, 2285 aos 36, nível da HBM (~1.3 TB/s)
+                aos 48 MiB. Controlo 1536 MiB = 1245 GB/s (HBM, bate com o
+                1274 de novembro). Tudo a 1410 MHz (clock.csv cruzado com a
+                hora de cada medição). Valor na Tabela I: 3067 GB/s (12 MiB).
+              - Duas versões erradas pelo caminho, ficam registadas:
+                v1 (job 2269989) deslocava os índices a cada repetição; sem
+                sincronização entre blocos havia reutilização falsa e a
+                96 MiB deu 2423 GB/s, acima do máximo da HBM: impossível.
+                v2 (job 2270004) estava certa mas a GPU subiu de 1095 para
+                1410 MHz a meio (salto de 1.29x aos 24 MiB). v3 aquece 3 s
+                antes de medir e o script falha sozinho se o controlo
+                passar de 1555 GB/s.
+Estado:       DECIDIDO E FEITO (Rodrigo, 25/11/2026).
+
 ===============================================================================
  DECISÕES PENDENTES (a discutir)
 ===============================================================================

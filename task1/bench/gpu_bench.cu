@@ -4,17 +4,19 @@
  *   peak  : pico FP32 com FMAs independentes em registos (como peak.c)
  *   triad : banda da memória global (HBM2) com o kernel Triad a = b + s*c
  *           (o mesmo do STREAM/triad.c: 12 B por elemento contados)
+ *   l2    : banda da L2 (LLC da A100) com o Triad em arrays pequenos (D28)
  *   lat   : latência com pointer chasing (1 só thread, como latency.c):
  *           mostra L1, L2 (40 MiB) e HBM
  * Tempos com cudaEvent; 1 aquecimento + REPS repetições (D10).
  * Compilar: nvcc -O3 -arch=sm_80 -o gpu_bench gpu_bench.cu
- * Uso: ./gpu_bench peak|triad|lat [reps] [quick]
+ * Uso: ./gpu_bench peak|triad|l2|lat [reps] [quick]
  * NOTA: printf só com ASCII (problema do .base64, ver sgemm.c).
  */
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <ctime>
 #include <cuda_runtime.h>
 
 #define CK(x) do { cudaError_t e = (x); if (e != cudaSuccess) { \
@@ -46,6 +48,43 @@ __global__ void k_triad(float *a, const float *b, const float *c, float s, size_
         a[i] = b[i] + s * c[i];
 }
 
+/* ---------------- Triad na L2 (D28, versão 2) ----------------
+ * Mesmo Triad, mas com os 3 arrays pequenos (cabem na L2 de 40 MiB) e INNER
+ * repetições dentro do kernel: uma passagem de 12 MiB demora ~5 us, pouco mais
+ * do que lançar um kernel, por isso repetimos lá dentro.
+ * ld/st .cg = "cache global": usa só a L2, salta a L1 de cada SM, para medir a
+ * L2 e não a L1. São asm volatile: o compilador não pode juntar nem apagar
+ * repetições. Contam-se 12 B por elemento.
+ * Versão 1 (job 2269989) deslocava os índices a cada repetição; sem
+ * sincronização entre blocos, um bloco adiantado relia dados que outro tinha
+ * acabado de trazer, e a 96 MiB deu 2423 GB/s, acima do máximo da HBM (1555):
+ * medição errada. Agora cada thread trata sempre os mesmos elementos, e os
+ * tamanhos de 384 e 1536 MiB servem de controlo (têm de dar <= 1555). */
+/* ld/st ".cg" em PTX (o mesmo que __ldcg/__stcg do CUDA, escrito à mão para
+ * não depender da versão dos headers) */
+__device__ __forceinline__ float ldcg(const float *p)
+{ float v; asm volatile("ld.global.cg.f32 %0, [%1];" : "=f"(v) : "l"(p)); return v; }
+__device__ __forceinline__ void stcg(float *p, float v)
+{ asm volatile("st.global.cg.f32 [%0], %1;" :: "l"(p), "f"(v) : "memory"); }
+
+__global__ void k_triad_l2(float *a, const float *b, const float *c, float s, size_t n, int inner)
+{
+    size_t i0 = blockIdx.x * (size_t)blockDim.x + threadIdx.x, G = (size_t)gridDim.x * blockDim.x;
+    for (int r = 0; r < inner; r++)
+        for (size_t i = i0; i < n; i += G)
+            stcg(&a[i], ldcg(&b[i]) + s * ldcg(&c[i]));
+}
+
+/* valores diferentes de zero e variados (não deixa a GPU tirar partido de
+ * dados todos iguais) */
+__global__ void k_init(float *a, float *b, float *c, size_t n)
+{
+    for (size_t i = blockIdx.x * (size_t)blockDim.x + threadIdx.x; i < n; i += (size_t)gridDim.x * blockDim.x) {
+        unsigned h = (unsigned)i * 2654435761u;
+        a[i] = 0.0f; b[i] = 1.0f + (h >> 8) * 1e-7f; c[i] = 2.0f - (h >> 9) * 1e-7f;
+    }
+}
+
 /* ---------------- latência ---------------- */
 __global__ void k_chase(const unsigned *next, long steps, unsigned *out)
 {
@@ -54,11 +93,14 @@ __global__ void k_chase(const unsigned *next, long steps, unsigned *out)
     out[0] = p;                              /* usa o resultado: o ciclo não pode ser apagado */
 }
 
+/* relógio de parede em segundos (para cruzar com o registo de clock do nvidia-smi) */
+static double wall_s() { struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts); return ts.tv_sec + ts.tv_nsec * 1e-9; }
+
 static float time_ms(cudaEvent_t t0, cudaEvent_t t1) { float ms; CK(cudaEventElapsedTime(&ms, t0, t1)); return ms; }
 
 int main(int argc, char **argv)
 {
-    if (argc < 2) { fprintf(stderr, "uso: %s peak|triad|lat [reps] [quick]\n", argv[0]); return 1; }
+    if (argc < 2) { fprintf(stderr, "uso: %s peak|triad|l2|lat [reps] [quick]\n", argv[0]); return 1; }
     const char *mode = argv[1];
     int reps = argc > 2 ? atoi(argv[2]) : 10;
     int quick = argc > 3 && !strcmp(argv[3], "quick");
@@ -96,6 +138,48 @@ int main(int argc, char **argv)
             printf("CSV,triad,%d,%zu,%.3f,%.1f\n", r, n, ms, 12.0 * n / ms / 1e6);
         }
         CK(cudaFree(a)); CK(cudaFree(b)); CK(cudaFree(c));
+    } else if (!strcmp(mode, "l2")) {
+        /* Varrimento do tamanho TOTAL (3 arrays): 3 a 96 MiB, mais 384 e 1536
+         * MiB como controlo (HBM). A L2 tem 40 MiB em 2 metades de 20 MiB:
+         * espera-se um patamar alto até ~20 MiB e uma queda depois. */
+        const double mib[] = {3, 6, 12, 18, 24, 30, 36, 48, 96, 384, 1536};
+        int threads = 256, blocks = p.multiProcessorCount * 8;      /* 2048 threads por SM */
+        /* Aquecimento (versão 3): a GPU arranca a 1095 MHz e só sobe para
+         * 1410 MHz depois de algum tempo em carga. Na versão 2 o salto aos
+         * 24 MiB era o clock a subir a meio do varrimento. Corremos ~3 s de
+         * Triad antes de medir, para todos os tamanhos verem o mesmo clock. */
+        {
+            size_t n = (size_t)(12.0 * 1048576.0 / 12.0);
+            float *a, *b, *c;
+            CK(cudaMalloc(&a, n * 4)); CK(cudaMalloc(&b, n * 4)); CK(cudaMalloc(&c, n * 4));
+            k_init<<<p.multiProcessorCount * 8, 256>>>(a, b, c, n);
+            double t_end = wall_s() + (quick ? 1.0 : 3.0);
+            while (wall_s() < t_end) {
+                k_triad_l2<<<blocks, threads>>>(a, b, c, 3.0f, n, 200);
+                CK(cudaDeviceSynchronize());
+            }
+            CK(cudaGetLastError());
+            CK(cudaFree(a)); CK(cudaFree(b)); CK(cudaFree(c));
+        }
+        printf("CSV,mode,total_MiB,rep,inner,ms,GBps,t_unix\n");
+        for (double m : mib) {
+            size_t n = (size_t)(m * 1048576.0 / 12.0);
+            /* ~24 GB movidos por chamada (~10 ms), no máximo 1000 repetições */
+            int inner = (int)(24000.0 / m); if (inner > 1000) inner = 1000; if (inner < 10) inner = 10;
+            if (quick) inner = inner / 20 > 2 ? inner / 20 : 2;
+            float *a, *b, *c;
+            CK(cudaMalloc(&a, n * 4)); CK(cudaMalloc(&b, n * 4)); CK(cudaMalloc(&c, n * 4));
+            k_init<<<p.multiProcessorCount * 8, 256>>>(a, b, c, n);
+            CK(cudaDeviceSynchronize()); CK(cudaGetLastError());
+            for (int r = 0; r <= reps; r++) {                  /* r=0 = aquecimento */
+                CK(cudaEventRecord(t0));
+                k_triad_l2<<<blocks, threads>>>(a, b, c, 3.0f, n, inner);
+                CK(cudaEventRecord(t1)); CK(cudaEventSynchronize(t1)); CK(cudaGetLastError());
+                double ms = time_ms(t0, t1);
+                printf("CSV,l2,%.0f,%d,%d,%.3f,%.1f,%.3f\n", m, r, inner, ms, 12.0 * n * inner / ms / 1e6, wall_s());
+            }
+            CK(cudaFree(a)); CK(cudaFree(b)); CK(cudaFree(c));
+        }
     } else if (!strcmp(mode, "lat")) {
         /* Ciclo aleatório (Sattolo) com passo de 128 B (1 linha da L2 da A100
          * = 4 setores de 32 B), de 4 KiB até 1 GiB (64 MiB em modo quick). */
